@@ -2,6 +2,7 @@ APP := avr-emulator
 SRC_DIR := src
 BUILD_DIR := build
 TARGET := $(BUILD_DIR)/$(APP)
+TEST_TARGET := $(BUILD_DIR)/tests/phase1_tests
 
 CC ?= cc
 DEBUGGER ?= lldb
@@ -14,7 +15,7 @@ LDLIBS :=
 SOURCES := $(shell find $(SRC_DIR) -type f -name '*.c')
 OBJECTS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SOURCES))
 
-.PHONY: all compile build run debug clean help
+.PHONY: all compile build test run debug clean help
 
 all: build
 
@@ -22,6 +23,14 @@ ifneq ($(strip $(SOURCES)),)
 compile: $(OBJECTS)
 
 build: $(TARGET)
+
+test: $(TEST_TARGET)
+	$(TEST_TARGET)
+
+$(TEST_TARGET): tests/test_phase1.c src/cpu/avr_cpu.c \
+                src/instructions/avr_instruction.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -o $@
 
 $(TARGET): $(OBJECTS)
 	@mkdir -p $(dir $@)
@@ -52,6 +61,7 @@ help:
 	@printf '%s\n' \
 	  'make compile  Compile source files into build objects.' \
 	  'make build    Build $(TARGET).' \
+	  'make test     Run CPU reset and arithmetic flag tests.' \
 	  'make run      Build and run the emulator.' \
 	  'make debug    Build and open the emulator in $(DEBUGGER).' \
 	  'make clean    Remove generated build files.'
