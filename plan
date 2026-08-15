@@ -1,0 +1,426 @@
+## Phase 1 — Minimal AVR CPU
+
+**Goal:** build the smallest useful emulator core:
+
+> `R0–R31` + `PC` + `SREG` + ~5 instructions
+
+No SRAM, Flash, GPIO, EEPROM, interrupts, or peripherals yet.
+
+### 1. Set up the project
+
+Use C with a conventional Linux build environment.
+
+Recommended stack:
+
+* **C** — emulator implementation
+* **GCC** — compiler
+* **Make** or **CMake** — build system
+* **Git** — version control
+* **GDB** — debugging
+* **Valgrind** — later, for memory/debugging issues
+* **GCC sanitizers** — useful for catching undefined behavior
+
+On Fedora, the basic development environment should include:
+
+* `gcc`
+* `gcc-c++` isn't necessary for the project
+* `make`
+* `gdb`
+* `git`
+* `cmake` if we choose CMake
+* `valgrind`
+
+We don't need any external C libraries for the emulator itself. **Use the C standard library only at first.**
+
+---
+
+## 2. Decide on the project structure
+
+Keep the architecture simple from the beginning.
+
+Something along these lines:
+
+```text
+avr-emulator/
+├── src/
+│   ├── cpu
+│   ├── instructions
+│   └── main
+├── include/
+├── tests/
+├── Makefile
+├── README
+└── .gitignore
+```
+
+Don't over-engineer the directory structure. We're making a learning project, not an operating system.
+
+---
+
+## 3. Define the CPU state
+
+Before implementing instructions, define exactly what your emulator considers "the CPU."
+
+For Phase 1:
+
+### General-purpose registers
+
+The ATmega328P has:
+
+```text
+R0 ... R31
+```
+
+Each is **8 bits**.
+
+So conceptually:
+
+```text
+32 × 8-bit registers
+```
+
+### Program Counter
+
+The `PC` tracks the current instruction.
+
+For now, we don't need to obsess over the exact ATmega328P PC width. We should use an appropriate integer representation internally and document the architectural behavior we're emulating.
+
+### SREG
+
+The Status Register contains:
+
+```text
+I T H S V N Z C
+```
+
+For Phase 1, you'll mainly care about the arithmetic flags:
+
+* `H` — Half Carry
+* `S` — Sign
+* `V` — Two's complement overflow
+* `N` — Negative
+* `Z` — Zero
+* `C` — Carry
+
+`I` and `T` can initially exist without implementing instructions that use them.
+
+---
+
+## 4. Establish the CPU API
+
+Before implementing instructions, decide what operations the rest of the program can perform on the CPU.
+
+Conceptually, you'll want operations equivalent to:
+
+```text
+create/reset CPU
+execute one instruction
+read register
+write register
+read SREG
+write SREG
+read PC
+write PC
+```
+
+The important design decision is:
+
+**The instruction implementation should manipulate CPU state through a well-defined CPU representation rather than having random global variables everywhere.**
+
+This will matter a lot once we add the visualizer.
+
+---
+
+## 5. Decide how instructions are represented
+
+AVR instructions are ultimately **machine-code words**.
+
+For our first version, don't worry about loading binaries.
+
+We can represent an instruction as its decoded operation plus its operands.
+
+Conceptually:
+
+```text
+Instruction
+├── operation
+├── destination register
+├── source register
+└── immediate value
+```
+
+Eventually you'll have:
+
+```text
+machine code
+     ↓
+decoder
+     ↓
+Instruction
+     ↓
+executor
+     ↓
+CPU state
+```
+
+But for the first Phase 1 tests, we can initially construct instructions ourselves rather than implementing the binary decoder.
+
+That keeps the first milestone focused.
+
+---
+
+## 6. Pick the first five instructions
+
+I'd use these:
+
+### `LDI`
+
+Load an immediate value into a register.
+
+Purpose:
+
+* Introduces immediate values
+* Introduces register writes
+* Gives us a way to initialize state
+
+### `MOV`
+
+Copy one register to another.
+
+Purpose:
+
+* Basic register-to-register operation
+
+### `ADD`
+
+Add two registers.
+
+Purpose:
+
+* Arithmetic
+* Flags
+* Overflow/carry behavior
+
+### `SUB`
+
+Subtract two registers.
+
+Purpose:
+
+* More flag behavior
+* Signed/unsigned arithmetic concepts
+
+### `INC`
+
+Increment a register.
+
+Purpose:
+
+* Simple arithmetic
+* More flag behavior
+* Good testing instruction
+
+This gives us enough functionality to make nontrivial little programs.
+
+---
+
+## 7. Treat flags as a major Phase 1 objective
+
+Don't consider an instruction finished just because the register contains the correct result.
+
+For example:
+
+```text
+ADD R16, R17
+```
+
+has two categories of effects:
+
+```text
+R16 changes
+SREG changes
+```
+
+Your tests should verify **both**.
+
+This is probably the most educational part of Phase 1 because you'll have to understand:
+
+* binary addition
+* carry
+* overflow
+* signed vs unsigned numbers
+* two's complement
+* individual bits
+* bit masks
+
+---
+
+## 8. Implement CPU reset behavior
+
+Give the emulator a defined initial state.
+
+After reset, establish known values for:
+
+* All registers
+* `PC`
+* `SREG`
+
+Don't leave anything dependent on whatever happens to be in memory.
+
+This gives you a predictable starting point for tests and eventually for the visualizer.
+
+---
+
+## 9. Build tests before the visualizer
+
+This is important.
+
+Before making anything graphical, you should be able to prove:
+
+```text
+LDI works
+MOV works
+ADD works
+SUB works
+INC works
+```
+
+And separately:
+
+```text
+PC behaves correctly
+SREG behaves correctly
+CPU reset behaves correctly
+```
+
+Especially test **edge cases**.
+
+For example, for addition:
+
+```text
+0x00 + 0x00
+0x01 + 0x01
+0xFF + 0x01
+```
+
+And for subtraction:
+
+```text
+0x01 - 0x01
+0x00 - 0x01
+```
+
+These expose flag bugs very quickly.
+
+---
+
+## 10. Add a tiny command-line driver
+
+Before a graphical visualizer, make the emulator usable from the terminal.
+
+Something conceptually like:
+
+```text
+CPU reset
+
+PC:   0000
+R16:  00
+R17:  00
+SREG: 00000000
+
+Execute LDI
+
+PC:   0002
+R16:  05
+R17:  00
+SREG: 00000000
+
+Execute ADD
+
+PC:   0004
+R16:  08
+R17:  03
+SREG: 00000000
+```
+
+This gives you a very useful debugging interface before we introduce any GUI framework.
+
+---
+
+## 11. Don't add a GUI library yet
+
+For **Phase 1**, I would deliberately avoid SDL, GTK, raylib, ncurses, etc.
+
+We don't need one yet.
+
+The progression should be:
+
+```text
+C
+ ↓
+CPU state
+ ↓
+Instructions
+ ↓
+Tests
+ ↓
+CLI debugging
+ ↓
+visualizer
+```
+
+Once the CPU core is stable, we can decide what visualization technology makes sense.
+
+For the visualizer, **SDL2/SDL3** or **raylib** would both be reasonable candidates, but choosing one now would add complexity before we have anything to visualize.
+
+---
+
+## 12. Git from the first line
+
+Make small commits as you progress.
+
+For example:
+
+```text
+initial project structure
+add CPU state
+add CPU reset
+add LDI
+add MOV
+add ADD
+add arithmetic flag handling
+add SUB
+add INC
+add instruction tests
+add CLI debugger
+```
+
+This is particularly useful for a low-level project because when you eventually break something, you can identify exactly which architectural change caused it.
+
+---
+
+# Phase 1 definition of done
+
+I'd consider Phase 1 complete when you can do this:
+
+```text
+Create CPU
+   ↓
+Reset CPU
+   ↓
+Initialize registers
+   ↓
+Execute ~5 instructions
+   ↓
+Update PC
+   ↓
+Update SREG correctly
+   ↓
+Inspect CPU state from terminal
+   ↓
+All behavior covered by tests
+```
+
+And importantly, **we should be able to explain every byte and every bit in the CPU state.**
+
+That's the right level for the first step. Once that works, Phase 2 can introduce **instruction encoding/decoding and Flash**, which is where the emulator starts feeling like an actual AVR rather than a collection of C functions.

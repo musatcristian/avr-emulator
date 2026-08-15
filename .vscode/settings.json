@@ -1,0 +1,26 @@
+{
+  "C_Cpp.default.includePath": [
+    "${workspaceFolder}/include",
+    "${workspaceFolder}/src",
+    "/usr/lib",
+    "/usr/lib64",
+    "/usr/include"
+  ],
+  "C_Cpp.default.browse.path": [
+    "${workspaceFolder}/include",
+    "${workspaceFolder}/src",
+    "/usr/lib",
+    "/usr/lib64",
+    "/usr/include"
+  ],
+  "C_Cpp.default.compilerPath": "/usr/bin/gcc",
+  "C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
+  "C_Cpp.default.cStandard": "c23",
+  "files.associations": {
+    "*.h": "c"
+  },
+  "search.exclude": {
+    "**/build": true,
+    "**/tmp": true
+  }
+}
