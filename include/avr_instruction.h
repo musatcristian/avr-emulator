@@ -1,7 +1,10 @@
 #ifndef AVR_INSTRUCTION_H
 #define AVR_INSTRUCTION_H
 
+#include <stdbool.h>
 #include <stdint.h>
+
+#include "avr_cpu.h"
 
 typedef enum
 {
@@ -19,5 +22,7 @@ typedef struct
   uint8_t source_register;
   uint8_t immediate;
 } AvrInstruction;
+
+bool avr_execute_instruction(AvrCpu *cpu, const AvrInstruction *instruction);
 
 #endif
