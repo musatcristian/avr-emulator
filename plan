@@ -14,10 +14,9 @@ Recommended stack:
 
 * **C** — emulator implementation
 * **GCC** — compiler
-* **Make** or **CMake** — build system
+* **Make** — build system
 * **Git** — version control
 * **GDB** — debugging
-* **Valgrind** — later, for memory/debugging issues
 * **GCC sanitizers** — useful for catching undefined behavior
 
 On Fedora, the basic development environment should include:
@@ -27,8 +26,6 @@ On Fedora, the basic development environment should include:
 * `make`
 * `gdb`
 * `git`
-* `cmake` if we choose CMake
-* `valgrind`
 
 We don't need any external C libraries for the emulator itself. **Use the C standard library only at first.**
 
