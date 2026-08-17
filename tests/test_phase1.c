@@ -18,31 +18,31 @@ static void execute(AvrMCU *cpu, AvrOperation operation, uint8_t destination,
 
 static void test_reset_clears_cpu(void)
 {
-  AvrMCU cpu = avr_cpu_create();
+  AvrMCU cpu = avr_mcu_create();
 
   for (uint8_t index = 0; index < AVR_REGISTER_COUNT; ++index)
   {
-    assert(avr_cpu_write_register(&cpu, index, UINT8_C(0xa5)));
+    assert(avr_mcu_write_register(&cpu, index, UINT8_C(0xa5)));
   }
-  avr_cpu_write_pc(&cpu, UINT16_C(0xffff));
-  avr_cpu_write_sreg(&cpu, UINT8_C(0xff));
+  avr_mcu_write_pc(&cpu, UINT16_C(0xffff));
+  avr_mcu_write_sreg(&cpu, UINT8_C(0xff));
 
-  avr_cpu_reset(&cpu);
+  avr_mcu_reset(&cpu);
 
   for (uint8_t index = 0; index < AVR_REGISTER_COUNT; ++index)
   {
     uint8_t value = UINT8_C(0xff);
-    assert(avr_cpu_read_register(&cpu, index, &value));
+    assert(avr_mcu_read_register(&cpu, index, &value));
     assert(value == 0);
   }
-  assert(avr_cpu_read_pc(&cpu) == 0);
-  assert(avr_cpu_read_sreg(&cpu) == 0);
+  assert(avr_mcu_read_pc(&cpu) == 0);
+  assert(avr_mcu_read_sreg(&cpu) == 0);
   printf("test_reset_clears_cpu passed!\n");
 }
 
 static void test_add_flags(void)
 {
-  AvrMCU cpu = avr_cpu_create();
+  AvrMCU cpu = avr_mcu_create();
 
   cpu.registers[16] = 0;
   cpu.registers[17] = 0;
@@ -71,7 +71,7 @@ static void test_add_flags(void)
 
 static void test_sub_flags(void)
 {
-  AvrMCU cpu = avr_cpu_create();
+  AvrMCU cpu = avr_mcu_create();
 
   cpu.registers[16] = 1;
   cpu.registers[17] = 1;
@@ -94,7 +94,7 @@ static void test_sub_flags(void)
 
 static void test_ldi_and_mov(void)
 {
-  AvrMCU cpu = avr_cpu_create();
+  AvrMCU cpu = avr_mcu_create();
   AvrInstruction instruction = {
     .operation = AVR_OPERATION_LDI,
     .destination_register = 16,
@@ -119,7 +119,7 @@ static void test_ldi_and_mov(void)
 
 static void test_invalid_instruction_does_not_change_cpu(void)
 {
-  AvrMCU cpu = avr_cpu_create();
+  AvrMCU cpu = avr_mcu_create();
   AvrInstruction instruction = {
     .operation = AVR_OPERATION_LDI,
     .destination_register = 15,
@@ -136,7 +136,7 @@ static void test_invalid_instruction_does_not_change_cpu(void)
 
 static void test_inc_flags_and_preservation(void)
 {
-  AvrMCU cpu = avr_cpu_create();
+  AvrMCU cpu = avr_mcu_create();
 
   cpu.sreg = AVR_SREG_I | AVR_SREG_T | AVR_SREG_C | AVR_SREG_H;
   cpu.registers[16] = UINT8_C(0x7f);
@@ -154,7 +154,7 @@ static void test_inc_flags_and_preservation(void)
 
 static void test_arithmetic_preserves_interrupt_and_transfer_flags(void)
 {
-  AvrMCU cpu = avr_cpu_create();
+  AvrMCU cpu = avr_mcu_create();
 
   cpu.sreg = AVR_SREG_I | AVR_SREG_T;
   cpu.registers[16] = 1;

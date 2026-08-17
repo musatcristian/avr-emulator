@@ -28,19 +28,19 @@ typedef struct
   uint16_t flash[AVR_FLASH_SIZE];
 } AvrMCU;
 
-AvrMCU avr_cpu_create(void);
-void avr_cpu_reset(AvrMCU *cpu);
+AvrMCU avr_mcu_create(void);
+void avr_mcu_reset(AvrMCU *cpu);
 
-bool avr_cpu_read_register(const AvrMCU *cpu, uint8_t register_index,
+bool avr_mcu_read_register(const AvrMCU *cpu, uint8_t register_index,
                            uint8_t *value);
-bool avr_cpu_write_register(AvrMCU *cpu, uint8_t register_index,
+bool avr_mcu_write_register(AvrMCU *cpu, uint8_t register_index,
                             uint8_t value);
 
-uint16_t avr_cpu_read_pc(const AvrMCU *cpu);
-void avr_cpu_write_pc(AvrMCU *cpu, uint16_t value);
+uint16_t avr_mcu_read_pc(const AvrMCU *cpu);
+void avr_mcu_write_pc(AvrMCU *cpu, uint16_t value);
 
-uint8_t avr_cpu_read_sreg(const AvrMCU *cpu);
-void avr_cpu_write_sreg(AvrMCU *cpu, uint8_t value);
+uint8_t avr_mcu_read_sreg(const AvrMCU *cpu);
+void avr_mcu_write_sreg(AvrMCU *cpu, uint8_t value);
 
 bool avr_cpu_read_flash(const AvrMCU *cpu, uint16_t address,
                         uint16_t *instruction);

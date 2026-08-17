@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "avr_cpu.h"
+#include "avr_mcu.h"
 
 typedef enum
 {
@@ -23,6 +23,6 @@ typedef struct
   uint8_t immediate;
 } AvrInstruction;
 
-bool avr_execute_instruction(AvrMCU *cpu, const AvrInstruction *instruction);
+bool avr_execute_instruction(AvrMCU *mcu, const AvrInstruction *instruction);
 
 #endif

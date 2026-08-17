@@ -121,54 +121,54 @@ bool avr_execute_instruction(AvrMCU *cpu, const AvrInstruction *instruction)
       return false;
     }
 
-    avr_cpu_write_register(cpu, instruction->destination_register,
+    avr_mcu_write_register(cpu, instruction->destination_register,
                            instruction->immediate);
   }
   else if (instruction->operation == AVR_OPERATION_MOV)
   {
     if (!valid_register(instruction->source_register) ||
-        !avr_cpu_read_register(cpu, instruction->source_register, &source))
+        !avr_mcu_read_register(cpu, instruction->source_register, &source))
     {
       return false;
     }
 
-    avr_cpu_write_register(cpu, instruction->destination_register, source);
+    avr_mcu_write_register(cpu, instruction->destination_register, source);
   }
   else if (instruction->operation == AVR_OPERATION_ADD)
   {
     if (!valid_register(instruction->source_register) ||
-        !avr_cpu_read_register(cpu, instruction->destination_register,
+        !avr_mcu_read_register(cpu, instruction->destination_register,
                                &destination) ||
-        !avr_cpu_read_register(cpu, instruction->source_register, &source))
+        !avr_mcu_read_register(cpu, instruction->source_register, &source))
     {
       return false;
     }
 
     result = (uint8_t)(destination + source);
     flags = arithmetic_flags_add(destination, source, result);
-    avr_cpu_write_register(cpu, instruction->destination_register, result);
-    avr_cpu_write_sreg(cpu, (uint8_t)((avr_cpu_read_sreg(cpu) &
+    avr_mcu_write_register(cpu, instruction->destination_register, result);
+    avr_mcu_write_sreg(cpu, (uint8_t)((avr_mcu_read_sreg(cpu) &
                        (AVR_SREG_I | AVR_SREG_T)) | flags));
   }
   else if (instruction->operation == AVR_OPERATION_SUB)
   {
     if (!valid_register(instruction->source_register) ||
-        !avr_cpu_read_register(cpu, instruction->destination_register,
+        !avr_mcu_read_register(cpu, instruction->destination_register,
                                &destination) ||
-        !avr_cpu_read_register(cpu, instruction->source_register, &source))
+        !avr_mcu_read_register(cpu, instruction->source_register, &source))
     {
       return false;
     }
 
     result = (uint8_t)(destination - source);
     flags = arithmetic_flags_sub(destination, source, result);
-    avr_cpu_write_register(cpu, instruction->destination_register, result);
-    avr_cpu_write_sreg(cpu, (uint8_t)((avr_cpu_read_sreg(cpu) &
+    avr_mcu_write_register(cpu, instruction->destination_register, result);
+    avr_mcu_write_sreg(cpu, (uint8_t)((avr_mcu_read_sreg(cpu) &
                        (AVR_SREG_I | AVR_SREG_T)) | flags));
   }
   else if (instruction->operation == AVR_OPERATION_INC)
   {
-    if (!avr_cpu_read_register(cpu, instruction->destination_register,
+    if (!avr_mcu_read_register(cpu, instruction->destination_register,
                                &destination))
     {
       return false;
@@ -176,8 +176,8 @@ bool avr_execute_instruction(AvrMCU *cpu, const AvrInstruction *instruction)
 
     result = (uint8_t)(destination + 1);
     flags = arithmetic_flags_inc(result);
-    avr_cpu_write_register(cpu, instruction->destination_register, result);
-    avr_cpu_write_sreg(cpu, (uint8_t)((avr_cpu_read_sreg(cpu) &
+    avr_mcu_write_register(cpu, instruction->destination_register, result);
+    avr_mcu_write_sreg(cpu, (uint8_t)((avr_mcu_read_sreg(cpu) &
                                        (AVR_SREG_I | AVR_SREG_T | AVR_SREG_H |
                                         AVR_SREG_C)) | flags));
   }
@@ -186,6 +186,6 @@ bool avr_execute_instruction(AvrMCU *cpu, const AvrInstruction *instruction)
     return false;
   }
 
-  avr_cpu_write_pc(cpu, (uint16_t)(avr_cpu_read_pc(cpu) + 1));
+  avr_mcu_write_pc(cpu, (uint16_t)(avr_mcu_read_pc(cpu) + 1));
   return true;
 }

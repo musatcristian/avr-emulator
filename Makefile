@@ -27,7 +27,7 @@ build: $(TARGET)
 test: $(TEST_TARGET)
 	$(TEST_TARGET)
 
-$(TEST_TARGET): tests/test_phase1.c src/cpu/avr_cpu.c \
+$(TEST_TARGET): tests/test_phase1.c src/mcu/avr_mcu.c \
                 src/instructions/avr_instruction.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -o $@
@@ -61,7 +61,7 @@ help:
 	@printf '%s\n' \
 	  'make compile  Compile source files into build objects.' \
 	  'make build    Build $(TARGET).' \
-	  'make test     Run CPU reset and arithmetic flag tests.' \
+	  'make test     Run mcu reset and arithmetic flag tests.' \
 	  'make run      Build and run the emulator.' \
 	  'make debug    Build and open the emulator in $(DEBUGGER).' \
 	  'make clean    Remove generated build files.'
