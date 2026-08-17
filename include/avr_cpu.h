@@ -7,6 +7,7 @@
 enum
 {
   AVR_REGISTER_COUNT = 32,
+  AVR_FLASH_SIZE = 1024,
   AVR_SREG_C = UINT8_C(1) << 0,
   AVR_SREG_Z = UINT8_C(1) << 1,
   AVR_SREG_N = UINT8_C(1) << 2,
@@ -23,20 +24,27 @@ typedef struct
   /* AVR program counters address instruction words, not bytes. */
   uint16_t pc;
   uint8_t sreg;
-} AvrCpu;
+  /* Simulated Flash memory: array of 16-bit instruction words. */
+  uint16_t flash[AVR_FLASH_SIZE];
+} AvrMCU;
 
-AvrCpu avr_cpu_create(void);
-void avr_cpu_reset(AvrCpu *cpu);
+AvrMCU avr_cpu_create(void);
+void avr_cpu_reset(AvrMCU *cpu);
 
-bool avr_cpu_read_register(const AvrCpu *cpu, uint8_t register_index,
+bool avr_cpu_read_register(const AvrMCU *cpu, uint8_t register_index,
                            uint8_t *value);
-bool avr_cpu_write_register(AvrCpu *cpu, uint8_t register_index,
+bool avr_cpu_write_register(AvrMCU *cpu, uint8_t register_index,
                             uint8_t value);
 
-uint16_t avr_cpu_read_pc(const AvrCpu *cpu);
-void avr_cpu_write_pc(AvrCpu *cpu, uint16_t value);
+uint16_t avr_cpu_read_pc(const AvrMCU *cpu);
+void avr_cpu_write_pc(AvrMCU *cpu, uint16_t value);
 
-uint8_t avr_cpu_read_sreg(const AvrCpu *cpu);
-void avr_cpu_write_sreg(AvrCpu *cpu, uint8_t value);
+uint8_t avr_cpu_read_sreg(const AvrMCU *cpu);
+void avr_cpu_write_sreg(AvrMCU *cpu, uint8_t value);
+
+bool avr_cpu_read_flash(const AvrMCU *cpu, uint16_t address,
+                        uint16_t *instruction);
+bool avr_cpu_write_flash(AvrMCU *cpu, uint16_t address,
+                         uint16_t instruction);
 
 #endif

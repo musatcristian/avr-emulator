@@ -23,6 +23,6 @@ typedef struct
   uint8_t immediate;
 } AvrInstruction;
 
-bool avr_execute_instruction(AvrCpu *cpu, const AvrInstruction *instruction);
+bool avr_execute_instruction(AvrMCU *cpu, const AvrInstruction *instruction);
 
 #endif

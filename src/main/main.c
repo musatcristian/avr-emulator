@@ -3,7 +3,7 @@
 
 #include "avr_instruction.h"
 
-static void print_cpu(const AvrCpu *cpu)
+static void print_cpu(const AvrMCU *cpu)
 {
   printf("PC:   %04x\n", (unsigned int)avr_cpu_read_pc(cpu));
   printf("R16:  %02x\n", (unsigned int)cpu->registers[16]);
@@ -11,7 +11,7 @@ static void print_cpu(const AvrCpu *cpu)
   printf("SREG: %02x\n", (unsigned int)avr_cpu_read_sreg(cpu));
 }
 
-static bool execute(const char *name, AvrCpu *cpu, AvrInstruction instruction)
+static bool execute(const char *name, AvrMCU *cpu, AvrInstruction instruction)
 {
   printf("Execute %s\n", name);
   if (!avr_execute_instruction(cpu, &instruction))
@@ -27,7 +27,7 @@ static bool execute(const char *name, AvrCpu *cpu, AvrInstruction instruction)
 
 int main(void)
 {
-  AvrCpu cpu = avr_cpu_create();
+  AvrMCU cpu = avr_cpu_create();
 
   printf("CPU reset\n\n");
   print_cpu(&cpu);

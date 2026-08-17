@@ -46,9 +46,9 @@ PC → Flash address → instruction
 
 Since AVR's PC is instruction-oriented rather than simply a byte index, this is a good point to understand the difference between:
 
-* byte addresses
-* word addresses
-* instruction size
+- byte addresses
+- word addresses
+- instruction size
 
 For this phase, only support your 16-bit instructions, so the PC can advance predictably after each instruction.
 
@@ -161,11 +161,11 @@ CPU:
 
 Then verify:
 
-* Registers
-* `SREG`
-* `PC`
-* decoded operands
-* instruction execution
+- Registers
+- `SREG`
+- `PC`
+- decoded operands
+- instruction execution
 
 Keep your Phase 1 unit tests. They still test the instruction implementations independently.
 
@@ -219,16 +219,16 @@ and successfully run a tiny program containing your five supported instructions.
 
 ### Explicitly out of scope
 
-* SRAM
-* EEPROM
-* GPIO
-* Stack
-* Interrupts
-* Timers
-* Peripherals
-* 32-bit instructions
-* Full ATmega328P Flash size
-* ELF/HEX loading
-* GUI
+- SRAM
+- EEPROM
+- GPIO
+- Stack
+- Interrupts
+- Timers
+- Peripherals
+- 32-bit instructions
+- Full ATmega328P Flash size
+- ELF/HEX loading
+- GUI
 
 The key achievement of Phase 2 is that **your emulator is now executing actual AVR instruction encodings rather than an abstraction you invented.**

@@ -101,7 +101,7 @@ static bool valid_register(uint8_t register_index)
   return register_index < AVR_REGISTER_COUNT;
 }
 
-bool avr_execute_instruction(AvrCpu *cpu, const AvrInstruction *instruction)
+bool avr_execute_instruction(AvrMCU *cpu, const AvrInstruction *instruction)
 {
   uint8_t destination;
   uint8_t source;
