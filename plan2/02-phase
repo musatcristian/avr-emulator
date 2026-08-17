@@ -1,0 +1,234 @@
+# Phase 2 — Instruction Encoding + Flash
+
+**Goal:** move from manually constructed instructions to actual AVR machine code stored in simulated Flash.
+
+Keep this phase focused on just two things:
+
+1. **Representing AVR machine code**
+2. **Fetching and decoding instructions from Flash**
+
+No SRAM, GPIO, stack, interrupts, EEPROM, or GUI yet.
+
+---
+
+## 1. Add simulated Flash
+
+Introduce a small Flash memory region.
+
+You don't need to emulate the entire ATmega328P Flash yet. Give yourself a small fixed-size array representing program memory.
+
+Conceptually:
+
+```text
+Flash
+┌──────┬──────┬──────┬──────┬──────┐
+│word 0│word 1│word 2│word 3│ ...  │
+└──────┴──────┴──────┴──────┴──────┘
+   ↑
+  PC
+```
+
+Important AVR detail:
+
+**AVR instructions are generally 16 bits wide, but some instructions are 32 bits.**
+
+For Phase 2, choose **only 16-bit instructions**. This keeps the implementation manageable.
+
+---
+
+## 2. Define the relationship between PC and Flash
+
+Your emulator needs a clear rule for:
+
+```text
+PC → Flash address → instruction
+```
+
+Since AVR's PC is instruction-oriented rather than simply a byte index, this is a good point to understand the difference between:
+
+* byte addresses
+* word addresses
+* instruction size
+
+For this phase, only support your 16-bit instructions, so the PC can advance predictably after each instruction.
+
+---
+
+## 3. Implement instruction encoding
+
+Your existing instructions currently exist conceptually as:
+
+```text
+LDI R16, 5
+ADD R16, R17
+```
+
+Now you'll learn how those become actual binary instruction words.
+
+For example, conceptually:
+
+```text
+LDI R16, 5
+       ↓
+16-bit machine code
+       ↓
+Flash
+```
+
+Study the AVR instruction-set manual for the bit layout of your five instructions.
+
+Don't implement every encoding yet. Just the instructions you already support.
+
+---
+
+## 4. Implement the decoder
+
+Create the conceptual pipeline:
+
+```text
+Flash
+  ↓
+fetch 16-bit instruction
+  ↓
+decode opcode
+  ↓
+extract operands
+  ↓
+execute
+```
+
+The decoder's job is **not** to execute anything.
+
+It should answer questions like:
+
+```text
+What instruction is this?
+Which registers does it use?
+What immediate value does it contain?
+```
+
+Keeping decoding separate from execution will pay off later.
+
+---
+
+## 5. Change the CPU execution model
+
+Phase 1 probably looked roughly like:
+
+```text
+execute(instruction)
+```
+
+Phase 2 should become:
+
+```text
+fetch
+ ↓
+decode
+ ↓
+execute
+```
+
+The CPU's main step becomes:
+
+> **Fetch the instruction pointed to by PC, decode it, execute it, update PC.**
+
+This is the first point where you're actually simulating the basic behavior of a processor.
+
+---
+
+## 6. Test machine-code execution
+
+Your tests should now load actual instruction words into simulated Flash and execute them.
+
+For example, conceptually:
+
+```text
+Flash:
+    [LDI]
+    [LDI]
+    [ADD]
+
+CPU:
+    reset
+      ↓
+    execute
+      ↓
+    execute
+      ↓
+    execute
+```
+
+Then verify:
+
+* Registers
+* `SREG`
+* `PC`
+* decoded operands
+* instruction execution
+
+Keep your Phase 1 unit tests. They still test the instruction implementations independently.
+
+Add a second layer of tests for:
+
+**machine code → decoder → instruction → CPU state**
+
+---
+
+## 7. Add a tiny program loader
+
+Don't bother with ELF files, Intel HEX, or an assembler yet.
+
+For now, have a simple way of putting an array of machine-code words into simulated Flash.
+
+That lets you create tiny programs for testing.
+
+Something like:
+
+```text
+Program
+├── instruction
+├── instruction
+├── instruction
+└── instruction
+```
+
+The next phase can deal with loading real AVR binaries.
+
+---
+
+# Phase 2 definition of done
+
+You should be able to take:
+
+```text
+16-bit AVR machine code
+        ↓
+     Flash
+        ↓
+      fetch
+        ↓
+      decode
+        ↓
+     execute
+        ↓
+    CPU state
+```
+
+and successfully run a tiny program containing your five supported instructions.
+
+### Explicitly out of scope
+
+* SRAM
+* EEPROM
+* GPIO
+* Stack
+* Interrupts
+* Timers
+* Peripherals
+* 32-bit instructions
+* Full ATmega328P Flash size
+* ELF/HEX loading
+* GUI
+
+The key achievement of Phase 2 is that **your emulator is now executing actual AVR instruction encodings rather than an abstraction you invented.**
