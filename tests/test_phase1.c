@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -16,7 +17,7 @@ static void execute(AvrMCU *cpu, AvrOperation operation, uint8_t destination,
   assert(avr_execute_instruction(cpu, &instruction));
 }
 
-static void test_reset_clears_cpu(void)
+void test_reset_clears_cpu(void)
 {
   AvrMCU cpu = avr_mcu_create();
 
@@ -40,7 +41,7 @@ static void test_reset_clears_cpu(void)
   printf("test_reset_clears_cpu passed!\n");
 }
 
-static void test_add_flags(void)
+void test_add_flags(void)
 {
   AvrMCU cpu = avr_mcu_create();
 
@@ -69,7 +70,7 @@ static void test_add_flags(void)
   assert(cpu.sreg == (AVR_SREG_H | AVR_SREG_V | AVR_SREG_N));
 }
 
-static void test_sub_flags(void)
+void test_sub_flags(void)
 {
   AvrMCU cpu = avr_mcu_create();
 
@@ -92,7 +93,7 @@ static void test_sub_flags(void)
   assert(cpu.sreg == (AVR_SREG_H | AVR_SREG_V | AVR_SREG_S));
 }
 
-static void test_ldi_and_mov(void)
+void test_ldi_and_mov(void)
 {
   AvrMCU cpu = avr_mcu_create();
   AvrInstruction instruction = {
@@ -117,7 +118,7 @@ static void test_ldi_and_mov(void)
   assert(cpu.sreg == 0);
 }
 
-static void test_invalid_instruction_does_not_change_cpu(void)
+void test_invalid_instruction_does_not_change_cpu(void)
 {
   AvrMCU cpu = avr_mcu_create();
   AvrInstruction instruction = {
@@ -134,7 +135,7 @@ static void test_invalid_instruction_does_not_change_cpu(void)
   assert(cpu.registers[15] == 0);
 }
 
-static void test_inc_flags_and_preservation(void)
+void test_inc_flags_and_preservation(void)
 {
   AvrMCU cpu = avr_mcu_create();
 
@@ -152,7 +153,7 @@ static void test_inc_flags_and_preservation(void)
                       AVR_SREG_Z));
 }
 
-static void test_arithmetic_preserves_interrupt_and_transfer_flags(void)
+void test_arithmetic_preserves_interrupt_and_transfer_flags(void)
 {
   AvrMCU cpu = avr_mcu_create();
 
@@ -162,17 +163,4 @@ static void test_arithmetic_preserves_interrupt_and_transfer_flags(void)
   execute(&cpu, AVR_OPERATION_ADD, 16, 17);
   assert((cpu.sreg & (AVR_SREG_I | AVR_SREG_T)) ==
          (AVR_SREG_I | AVR_SREG_T));
-}
-
-int main(void)
-{
-  test_reset_clears_cpu();
-  test_ldi_and_mov();
-  test_add_flags();
-  test_sub_flags();
-  test_inc_flags_and_preservation();
-  test_arithmetic_preserves_interrupt_and_transfer_flags();
-  test_invalid_instruction_does_not_change_cpu();
-  printf("All tests passed!\n");
-  return 0;
 }

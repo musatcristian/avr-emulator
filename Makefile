@@ -2,13 +2,13 @@ APP := avr-emulator
 SRC_DIR := src
 BUILD_DIR := build
 TARGET := $(BUILD_DIR)/$(APP)
-TEST_TARGET := $(BUILD_DIR)/tests/phase1_tests
+TEST_TARGET := $(BUILD_DIR)/tests/test_runner
 
 CC ?= cc
 DEBUGGER ?= lldb
 
 CPPFLAGS := -Iinclude
-CFLAGS := -std=c11 -Wall -Wextra -Wpedantic -g
+CFLAGS := -std=c23 -Wall -Wextra -Wpedantic -g
 LDFLAGS :=
 LDLIBS :=
 
@@ -27,7 +27,8 @@ build: $(TARGET)
 test: $(TEST_TARGET)
 	$(TEST_TARGET)
 
-$(TEST_TARGET): tests/test_phase1.c src/mcu/avr_mcu.c \
+$(TEST_TARGET): tests/test_runner.c tests/test_phase1.c tests/test_phase2.c \
+				src/mcu/avr_mcu.c \
                 src/instructions/avr_instruction.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -o $@
@@ -61,7 +62,7 @@ help:
 	@printf '%s\n' \
 	  'make compile  Compile source files into build objects.' \
 	  'make build    Build $(TARGET).' \
-	  'make test     Run mcu reset and arithmetic flag tests.' \
+	  'make test     Run the Phase 1 and Phase 2 test suite.' \
 	  'make run      Build and run the emulator.' \
 	  'make debug    Build and open the emulator in $(DEBUGGER).' \
 	  'make clean    Remove generated build files.'
