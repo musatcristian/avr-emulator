@@ -16,7 +16,7 @@ jobs:
     # - name: configure
     #   run: ./configure
     - name: compile
-      run: make compile
+      run: make compile CC=gcc
     - name: build
       run: make build
     - name: test
