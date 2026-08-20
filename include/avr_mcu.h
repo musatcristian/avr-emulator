@@ -42,9 +42,9 @@ void avr_mcu_write_pc(AvrMCU *cpu, uint16_t value);
 uint8_t avr_mcu_read_sreg(const AvrMCU *cpu);
 void avr_mcu_write_sreg(AvrMCU *cpu, uint8_t value);
 
-bool avr_cpu_read_flash(const AvrMCU *cpu, uint16_t address,
+bool avr_mcu_read_flash(const AvrMCU *cpu, uint16_t address,
                         uint16_t *instruction);
-bool avr_cpu_write_flash(AvrMCU *cpu, uint16_t address,
+bool avr_mcu_write_flash(AvrMCU *cpu, uint16_t address,
                          uint16_t instruction);
 
 #endif

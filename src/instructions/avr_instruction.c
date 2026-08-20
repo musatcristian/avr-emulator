@@ -2,6 +2,180 @@
 
 #include <stddef.h>
 
+enum
+{
+  AVR_LDI_MASK = 0xf000,
+  AVR_LDI_OPCODE = 0xe000,
+  AVR_MOV_MASK = 0xfc00,
+  AVR_MOV_OPCODE = 0x2c00,
+  AVR_ADD_MASK = 0xfc00,
+  AVR_ADD_OPCODE = 0x0c00,
+  AVR_SUB_MASK = 0xfc00,
+  AVR_SUB_OPCODE = 0x1800,
+  AVR_INC_MASK = 0xfe0f,
+  AVR_INC_OPCODE = 0x9403
+};
+
+static bool valid_register(uint8_t register_index);
+
+static uint16_t encode_dual_register(uint16_t opcode, uint8_t destination,
+                                     uint8_t source)
+{
+  return (uint16_t)(opcode | ((uint16_t)(source & UINT8_C(0x10)) << 5) |
+                    ((uint16_t)destination << 4) | (source & UINT8_C(0x0f)));
+}
+
+static uint8_t decode_source_register(uint16_t instruction_word)
+{
+  return (uint8_t)((instruction_word & UINT16_C(0x000f)) |
+                   ((instruction_word >> 5) & UINT16_C(0x0010)));
+}
+
+bool avr_encode_instruction(const AvrInstruction *instruction,
+                            uint16_t *instruction_word)
+{
+  if (instruction == NULL || instruction_word == NULL)
+  {
+    return false;
+  }
+
+  if (instruction->operation == AVR_OPERATION_LDI)
+  {
+    if (instruction->destination_register < 16 ||
+        instruction->destination_register >= AVR_REGISTER_COUNT)
+    {
+      return false;
+    }
+
+    *instruction_word = (uint16_t)(AVR_LDI_OPCODE |
+                                   ((uint16_t)(instruction->immediate &
+                                               UINT8_C(0xf0))
+                                    << 4) |
+                                   (((uint16_t)instruction->destination_register
+                                     - 16)
+                                    << 4) |
+                                   (instruction->immediate & UINT8_C(0x0f)));
+    return true;
+  }
+
+  if (!valid_register(instruction->destination_register))
+  {
+    return false;
+  }
+
+  if (instruction->operation == AVR_OPERATION_MOV)
+  {
+    if (!valid_register(instruction->source_register))
+    {
+      return false;
+    }
+
+    *instruction_word = encode_dual_register(AVR_MOV_OPCODE,
+                                             instruction->destination_register,
+                                             instruction->source_register);
+    return true;
+  }
+
+  if (instruction->operation == AVR_OPERATION_ADD)
+  {
+    if (!valid_register(instruction->source_register))
+    {
+      return false;
+    }
+
+    *instruction_word = encode_dual_register(AVR_ADD_OPCODE,
+                                             instruction->destination_register,
+                                             instruction->source_register);
+    return true;
+  }
+
+  if (instruction->operation == AVR_OPERATION_SUB)
+  {
+    if (!valid_register(instruction->source_register))
+    {
+      return false;
+    }
+
+    *instruction_word = encode_dual_register(AVR_SUB_OPCODE,
+                                             instruction->destination_register,
+                                             instruction->source_register);
+    return true;
+  }
+
+  if (instruction->operation == AVR_OPERATION_INC)
+  {
+    *instruction_word = (uint16_t)(AVR_INC_OPCODE |
+                                   ((uint16_t)instruction->destination_register
+                                    << 4));
+    return true;
+  }
+
+  return false;
+}
+
+bool avr_decode_instruction_word(uint16_t instruction_word,
+                                 AvrInstruction *instruction)
+{
+  if (instruction == NULL)
+  {
+    return false;
+  }
+
+  if ((instruction_word & AVR_LDI_MASK) == AVR_LDI_OPCODE)
+  {
+    instruction->operation = AVR_OPERATION_LDI;
+    instruction->destination_register =
+      (uint8_t)(16 + ((instruction_word >> 4) & UINT16_C(0x000f)));
+    instruction->source_register = 0;
+    instruction->immediate =
+      (uint8_t)((instruction_word & UINT16_C(0x000f)) |
+                ((instruction_word >> 4) & UINT16_C(0x00f0)));
+    return true;
+  }
+
+  if ((instruction_word & AVR_MOV_MASK) == AVR_MOV_OPCODE)
+  {
+    instruction->operation = AVR_OPERATION_MOV;
+    instruction->destination_register =
+      (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
+    instruction->source_register = decode_source_register(instruction_word);
+    instruction->immediate = 0;
+    return true;
+  }
+
+  if ((instruction_word & AVR_ADD_MASK) == AVR_ADD_OPCODE)
+  {
+    instruction->operation = AVR_OPERATION_ADD;
+    instruction->destination_register =
+      (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
+    instruction->source_register = decode_source_register(instruction_word);
+    instruction->immediate = 0;
+    return true;
+  }
+
+  if ((instruction_word & AVR_SUB_MASK) == AVR_SUB_OPCODE)
+  {
+    instruction->operation = AVR_OPERATION_SUB;
+    instruction->destination_register =
+      (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
+    instruction->source_register = decode_source_register(instruction_word);
+    instruction->immediate = 0;
+    return true;
+  }
+
+  if ((instruction_word & AVR_INC_MASK) == AVR_INC_OPCODE)
+  {
+    instruction->operation = AVR_OPERATION_INC;
+    instruction->destination_register =
+      (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
+    instruction->source_register = 0;
+    instruction->immediate = 0;
+    return true;
+  }
+
+  return false;
+}
+
 static uint8_t arithmetic_flags_add(uint8_t left, uint8_t right,
                                     uint8_t result)
 {

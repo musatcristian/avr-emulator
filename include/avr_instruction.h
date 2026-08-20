@@ -23,6 +23,11 @@ typedef struct
   uint8_t immediate;
 } AvrInstruction;
 
+bool avr_encode_instruction(const AvrInstruction *instruction,
+                            uint16_t *instruction_word);
+bool avr_decode_instruction_word(uint16_t instruction_word,
+                                 AvrInstruction *instruction);
+
 bool avr_execute_instruction(AvrMCU *mcu, const AvrInstruction *instruction);
 
 #endif

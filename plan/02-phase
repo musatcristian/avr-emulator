@@ -56,14 +56,14 @@ For this phase, only support your 16-bit instructions, so the PC can advance pre
 
 ## 3. Implement instruction encoding
 
-Your existing instructions currently exist conceptually as:
+Existing instructions currently exist conceptually as:
 
 ```text
 LDI R16, 5
 ADD R16, R17
 ```
 
-Now you'll learn how those become actual binary instruction words.
+How do those become actual binary instruction words?
 
 For example, conceptually:
 
