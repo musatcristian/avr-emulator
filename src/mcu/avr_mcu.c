@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include "avr_instruction.h"
 #include "avr_mcu.h"
 
 
@@ -95,4 +96,19 @@ bool avr_mcu_load_program(AvrMCU *mcu, const uint16_t *program,
   }
 
   return true;
+}
+
+bool avr_mcu_step(AvrMCU *mcu)
+{
+  uint16_t instruction_word;
+  AvrInstruction instruction;
+
+  if (mcu == NULL ||
+      !avr_mcu_read_flash(mcu, avr_mcu_read_pc(mcu), &instruction_word) ||
+      !avr_decode_instruction_word(instruction_word, &instruction))
+  {
+    return false;
+  }
+
+  return avr_execute_instruction(mcu, &instruction);
 }
