@@ -2,6 +2,7 @@
 #define AVR_CPU_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 enum
@@ -46,5 +47,7 @@ bool avr_mcu_read_flash(const AvrMCU *cpu, uint16_t address,
                         uint16_t *instruction);
 bool avr_mcu_write_flash(AvrMCU *cpu, uint16_t address,
                          uint16_t instruction);
+bool avr_mcu_load_program(AvrMCU *mcu, const uint16_t *program,
+                          size_t instruction_count);
 
 #endif

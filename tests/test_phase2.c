@@ -178,13 +178,14 @@ void test_machine_code_execution(void)
     }
   };
 
+  uint16_t machine_code[sizeof(program) / sizeof(program[0])];
+
   for (size_t index = 0; index < sizeof(program) / sizeof(program[0]); ++index)
   {
-    uint16_t instruction_word = 0;
-
-    assert(avr_encode_instruction(&program[index], &instruction_word));
-    assert(avr_mcu_write_flash(&mcu, (uint16_t)index, instruction_word));
+    assert(avr_encode_instruction(&program[index], &machine_code[index]));
   }
+  assert(avr_mcu_load_program(&mcu, machine_code,
+                              sizeof(machine_code) / sizeof(machine_code[0])));
 
   assert(avr_mcu_step(&mcu));
   assert(mcu.registers[16] == UINT8_C(0x05));
@@ -223,4 +224,15 @@ void test_machine_code_execution_rejects_unknown_word(void)
   assert(!avr_mcu_step(&mcu));
   assert(mcu.pc == 4);
   assert(mcu.sreg == AVR_SREG_C);
+}
+
+void test_program_loader_bounds(void)
+{
+  AvrMCU mcu = avr_mcu_create();
+  uint16_t program[AVR_FLASH_SIZE + 1] = {0};
+
+  assert(!avr_mcu_load_program(NULL, program, 1));
+  assert(!avr_mcu_load_program(&mcu, NULL, 1));
+  assert(!avr_mcu_load_program(&mcu, program, AVR_FLASH_SIZE + 1));
+  assert(avr_mcu_load_program(&mcu, program, AVR_FLASH_SIZE));
 }

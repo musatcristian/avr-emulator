@@ -17,6 +17,7 @@ int main(void)
   test_instruction_encode_decode_roundtrip();
   test_machine_code_execution();
   test_machine_code_execution_rejects_unknown_word();
+  test_program_loader_bounds();
   printf("All tests passed!\n");
   return 0;
 }

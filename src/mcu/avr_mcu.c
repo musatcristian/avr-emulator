@@ -80,3 +80,19 @@ bool avr_mcu_write_flash(AvrMCU *mcu, uint16_t address,
   mcu->flash[address] = instruction;
   return true;
 }
+
+bool avr_mcu_load_program(AvrMCU *mcu, const uint16_t *program,
+                          size_t instruction_count)
+{
+  if (mcu == NULL || program == NULL || instruction_count > AVR_FLASH_SIZE)
+  {
+    return false;
+  }
+
+  for (size_t index = 0; index < instruction_count; ++index)
+  {
+    mcu->flash[index] = program[index];
+  }
+
+  return true;
+}
