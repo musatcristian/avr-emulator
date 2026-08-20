@@ -113,7 +113,7 @@ Keeping decoding separate from execution will pay off later.
 
 ## 5. Change the CPU execution model
 
-Phase 1 probably looked roughly like:
+Phase 1 looked roughly like:
 
 ```text
 execute(instruction)

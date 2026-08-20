@@ -142,3 +142,85 @@ void test_instruction_encode_decode_roundtrip(void)
     }
   }
 }
+
+void test_machine_code_execution(void)
+{
+  AvrMCU mcu = avr_mcu_create();
+  const AvrInstruction program[] = {
+    {
+      .operation = AVR_OPERATION_LDI,
+      .destination_register = 16,
+      .immediate = UINT8_C(0x05)
+    },
+    {
+      .operation = AVR_OPERATION_LDI,
+      .destination_register = 17,
+      .immediate = UINT8_C(0x03)
+    },
+    {
+      .operation = AVR_OPERATION_ADD,
+      .destination_register = 16,
+      .source_register = 17
+    },
+    {
+      .operation = AVR_OPERATION_MOV,
+      .destination_register = 18,
+      .source_register = 16
+    },
+    {
+      .operation = AVR_OPERATION_SUB,
+      .destination_register = 18,
+      .source_register = 17
+    },
+    {
+      .operation = AVR_OPERATION_INC,
+      .destination_register = 18
+    }
+  };
+
+  for (size_t index = 0; index < sizeof(program) / sizeof(program[0]); ++index)
+  {
+    uint16_t instruction_word = 0;
+
+    assert(avr_encode_instruction(&program[index], &instruction_word));
+    assert(avr_mcu_write_flash(&mcu, (uint16_t)index, instruction_word));
+  }
+
+  assert(avr_mcu_step(&mcu));
+  assert(mcu.registers[16] == UINT8_C(0x05));
+  assert(mcu.pc == 1);
+
+  assert(avr_mcu_step(&mcu));
+  assert(mcu.registers[17] == UINT8_C(0x03));
+  assert(mcu.pc == 2);
+
+  assert(avr_mcu_step(&mcu));
+  assert(mcu.registers[16] == UINT8_C(0x08));
+  assert(mcu.sreg == 0);
+  assert(mcu.pc == 3);
+
+  assert(avr_mcu_step(&mcu));
+  assert(mcu.registers[18] == UINT8_C(0x08));
+  assert(mcu.pc == 4);
+
+  assert(avr_mcu_step(&mcu));
+  assert(mcu.registers[18] == UINT8_C(0x05));
+  assert(mcu.sreg == 0);
+  assert(mcu.pc == 5);
+
+  assert(avr_mcu_step(&mcu));
+  assert(mcu.registers[18] == UINT8_C(0x06));
+  assert(mcu.pc == 6);
+}
+
+void test_machine_code_execution_rejects_unknown_word(void)
+{
+  AvrMCU mcu = avr_mcu_create();
+  mcu.pc = 4;
+  mcu.sreg = AVR_SREG_C;
+  assert(avr_mcu_write_flash(&mcu, 4, UINT16_C(0xffff)));
+
+  assert(!avr_mcu_step(&mcu));
+  assert(mcu.pc == 4);
+  assert(mcu.sreg == AVR_SREG_C);
+}

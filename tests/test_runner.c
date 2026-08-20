@@ -15,6 +15,8 @@ int main(void)
   test_instruction_encoding();
   test_instruction_decoding();
   test_instruction_encode_decode_roundtrip();
+  test_machine_code_execution();
+  test_machine_code_execution_rejects_unknown_word();
   printf("All tests passed!\n");
   return 0;
 }
