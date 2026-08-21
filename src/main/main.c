@@ -33,21 +33,9 @@ int main(void)
   print_mcu(&mcu);
   putchar('\n');
 
-  if (!execute("LDI R16, 0x05", &mcu, (AvrInstruction){
-                 .operation = AVR_OPERATION_LDI,
-                 .destination_register = 16,
-                 .immediate = 0x05
-               }) ||
-      !execute("LDI R17, 0x03", &mcu, (AvrInstruction){
-                 .operation = AVR_OPERATION_LDI,
-                 .destination_register = 17,
-                 .immediate = 0x03
-               }) ||
-      !execute("ADD R16, R17", &mcu, (AvrInstruction){
-                 .operation = AVR_OPERATION_ADD,
-                 .destination_register = 16,
-                 .source_register = 17
-               }))
+  if (!execute("LDI R16, 0x05", &mcu, (AvrInstruction){.operation = AVR_OPERATION_LDI, .destination_register = 16, .immediate = 0x05}) ||
+      !execute("LDI R17, 0x03", &mcu, (AvrInstruction){.operation = AVR_OPERATION_LDI, .destination_register = 17, .immediate = 0x03}) ||
+      !execute("ADD R16, R17", &mcu, (AvrInstruction){.operation = AVR_OPERATION_ADD, .destination_register = 16, .source_register = 17}))
   {
     return 1;
   }

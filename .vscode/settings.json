@@ -15,7 +15,23 @@
   ],
   "C_Cpp.default.compilerPath": "/usr/bin/gcc",
   "C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
-  "C_Cpp.default.cStandard": "c23",
+  "C_Cpp.default.cStandard": "c17",
+  "[c]": {
+    "editor.defaultFormatter": "ms-vscode.cpptools",
+    "editor.allowVariableFonts": true,
+    "editor.autoIndent": "brackets",
+    "editor.wordWrap": "wordWrapColumn",
+    "editor.wrappingIndent": "deepIndent",
+    "editor.wrappingStrategy": "advanced",
+    "editor.wordWrapColumn": 120,
+    "editor.tabCompletion": "on",
+    "editor.tabSize": 4,
+    "editor.foldingStrategy": "indentation"
+  },
+  "[makefile]": {
+    "editor.insertSpaces": false,
+    "editor.tabSize": 4
+  },
   "files.associations": {
     "*.h": "c"
   },

@@ -51,8 +51,7 @@ bool avr_encode_instruction(const AvrInstruction *instruction,
                                    ((uint16_t)(instruction->immediate &
                                                UINT8_C(0xf0))
                                     << 4) |
-                                   (((uint16_t)instruction->destination_register
-                                     - 16)
+                                   (((uint16_t)instruction->destination_register - 16)
                                     << 4) |
                                    (instruction->immediate & UINT8_C(0x0f)));
     return true;
@@ -125,11 +124,11 @@ bool avr_decode_instruction_word(uint16_t instruction_word,
   {
     instruction->operation = AVR_OPERATION_LDI;
     instruction->destination_register =
-      (uint8_t)(16 + ((instruction_word >> 4) & UINT16_C(0x000f)));
+        (uint8_t)(16 + ((instruction_word >> 4) & UINT16_C(0x000f)));
     instruction->source_register = 0;
     instruction->immediate =
-      (uint8_t)((instruction_word & UINT16_C(0x000f)) |
-                ((instruction_word >> 4) & UINT16_C(0x00f0)));
+        (uint8_t)((instruction_word & UINT16_C(0x000f)) |
+                  ((instruction_word >> 4) & UINT16_C(0x00f0)));
     return true;
   }
 
@@ -137,7 +136,7 @@ bool avr_decode_instruction_word(uint16_t instruction_word,
   {
     instruction->operation = AVR_OPERATION_MOV;
     instruction->destination_register =
-      (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
+        (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
     instruction->source_register = decode_source_register(instruction_word);
     instruction->immediate = 0;
     return true;
@@ -147,7 +146,7 @@ bool avr_decode_instruction_word(uint16_t instruction_word,
   {
     instruction->operation = AVR_OPERATION_ADD;
     instruction->destination_register =
-      (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
+        (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
     instruction->source_register = decode_source_register(instruction_word);
     instruction->immediate = 0;
     return true;
@@ -157,7 +156,7 @@ bool avr_decode_instruction_word(uint16_t instruction_word,
   {
     instruction->operation = AVR_OPERATION_SUB;
     instruction->destination_register =
-      (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
+        (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
     instruction->source_register = decode_source_register(instruction_word);
     instruction->immediate = 0;
     return true;
@@ -167,7 +166,7 @@ bool avr_decode_instruction_word(uint16_t instruction_word,
   {
     instruction->operation = AVR_OPERATION_INC;
     instruction->destination_register =
-      (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
+        (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
     instruction->source_register = 0;
     instruction->immediate = 0;
     return true;
@@ -216,17 +215,20 @@ static uint8_t arithmetic_flags_sub(uint8_t left, uint8_t right,
   uint8_t flags = 0;
 
   if (((uint8_t)(~left & right) | (right & result) |
-       (result & (uint8_t)~left)) & UINT8_C(0x80))
+       (result & (uint8_t)~left)) &
+      UINT8_C(0x80))
   {
     flags |= AVR_SREG_C;
   }
   if (((uint8_t)(~left & right) | (right & result) |
-       (result & (uint8_t)~left)) & UINT8_C(0x08))
+       (result & (uint8_t)~left)) &
+      UINT8_C(0x08))
   {
     flags |= AVR_SREG_H;
   }
   if ((((left & (uint8_t)~right & (uint8_t)~result) |
-        ((uint8_t)~left & right & result)) & UINT8_C(0x80)) != 0)
+        ((uint8_t)~left & right & result)) &
+       UINT8_C(0x80)) != 0)
   {
     flags |= AVR_SREG_V;
   }
@@ -275,7 +277,6 @@ static bool valid_register(uint8_t register_index)
   return register_index < AVR_REGISTER_COUNT;
 }
 
-
 bool avr_execute_instruction(AvrMCU *cpu, const AvrInstruction *instruction)
 {
   uint8_t destination;
@@ -323,7 +324,8 @@ bool avr_execute_instruction(AvrMCU *cpu, const AvrInstruction *instruction)
     flags = arithmetic_flags_add(destination, source, result);
     avr_mcu_write_register(cpu, instruction->destination_register, result);
     avr_mcu_write_sreg(cpu, (uint8_t)((avr_mcu_read_sreg(cpu) &
-                       (AVR_SREG_I | AVR_SREG_T)) | flags));
+                                       (AVR_SREG_I | AVR_SREG_T)) |
+                                      flags));
   }
   else if (instruction->operation == AVR_OPERATION_SUB)
   {
@@ -339,7 +341,8 @@ bool avr_execute_instruction(AvrMCU *cpu, const AvrInstruction *instruction)
     flags = arithmetic_flags_sub(destination, source, result);
     avr_mcu_write_register(cpu, instruction->destination_register, result);
     avr_mcu_write_sreg(cpu, (uint8_t)((avr_mcu_read_sreg(cpu) &
-                       (AVR_SREG_I | AVR_SREG_T)) | flags));
+                                       (AVR_SREG_I | AVR_SREG_T)) |
+                                      flags));
   }
   else if (instruction->operation == AVR_OPERATION_INC)
   {
@@ -354,7 +357,8 @@ bool avr_execute_instruction(AvrMCU *cpu, const AvrInstruction *instruction)
     avr_mcu_write_register(cpu, instruction->destination_register, result);
     avr_mcu_write_sreg(cpu, (uint8_t)((avr_mcu_read_sreg(cpu) &
                                        (AVR_SREG_I | AVR_SREG_T | AVR_SREG_H |
-                                        AVR_SREG_C)) | flags));
+                                        AVR_SREG_C)) |
+                                      flags));
   }
   else
   {

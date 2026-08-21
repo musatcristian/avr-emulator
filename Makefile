@@ -8,7 +8,7 @@ CC ?= cc
 DEBUGGER ?= lldb
 
 CPPFLAGS := -Iinclude
-CFLAGS := -std=c18 -Wall -Wextra -Wpedantic -g
+CFLAGS := -std=c17 -Wall -Wextra -Wpedantic -g
 LDFLAGS :=
 LDLIBS :=
 
