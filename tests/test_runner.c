@@ -2,6 +2,7 @@
 
 #include "test_phase1.h"
 #include "test_phase2.h"
+#include "test_phase3.h"
 
 int main(void)
 {
@@ -18,6 +19,12 @@ int main(void)
   test_machine_code_execution();
   test_machine_code_execution_rejects_unknown_word();
   test_program_loader_bounds();
+  test_sram_api();
+  test_ld_st_instruction_encoding();
+  test_ld_st_instruction_decoding_and_roundtrip();
+  test_ld_st_direct_execution();
+  test_ld_st_failure_semantics();
+  test_phase3_machine_code_integration();
   printf("All tests passed!\n");
   return 0;
 }

@@ -2,8 +2,6 @@
 #include "avr_instruction.h"
 #include "avr_mcu.h"
 
-
-
 AvrMCU avr_mcu_create(void)
 {
   return (AvrMCU){0};
@@ -79,6 +77,28 @@ bool avr_mcu_write_flash(AvrMCU *mcu, uint16_t address,
   }
 
   mcu->flash[address] = instruction;
+  return true;
+}
+
+bool avr_mcu_read_data(const AvrMCU *mcu, uint16_t address, uint8_t *value)
+{
+  if (address >= AVR_SRAM_SIZE || mcu == NULL || value == NULL)
+  {
+    return false;
+  }
+
+  *value = mcu->sram[address];
+  return true;
+}
+
+bool avr_mcu_write_data(AvrMCU *mcu, uint16_t address, uint8_t value)
+{
+  if (address >= AVR_SRAM_SIZE || mcu == NULL)
+  {
+    return false;
+  }
+
+  mcu->sram[address] = value;
   return true;
 }
 

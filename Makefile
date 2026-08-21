@@ -27,7 +27,7 @@ build: $(TARGET)
 test: $(TEST_TARGET)
 	$(TEST_TARGET)
 
-$(TEST_TARGET): tests/test_runner.c tests/test_phase1.c tests/test_phase2.c \
+$(TEST_TARGET): tests/test_runner.c tests/test_phase1.c tests/test_phase2.c tests/test_phase3.c \
 				src/mcu/avr_mcu.c \
                 src/instructions/avr_instruction.c
 	@mkdir -p $(dir $@)

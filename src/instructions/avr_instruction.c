@@ -13,10 +13,15 @@ enum
   AVR_SUB_MASK = 0xfc00,
   AVR_SUB_OPCODE = 0x1800,
   AVR_INC_MASK = 0xfe0f,
-  AVR_INC_OPCODE = 0x9403
+  AVR_INC_OPCODE = 0x9403,
+  AVR_LD_MASK = 0xfe0f,
+  AVR_LD_OPCODE = 0x900c,
+  AVR_ST_MASK = 0xfe0f,
+  AVR_ST_OPCODE = 0x920c
 };
 
 static bool valid_register(uint8_t register_index);
+static bool read_x_pointer(const AvrMCU *mcu, uint16_t *address);
 
 static uint16_t encode_dual_register(uint16_t opcode, uint8_t destination,
                                      uint8_t source)
@@ -29,6 +34,12 @@ static uint8_t decode_source_register(uint16_t instruction_word)
 {
   return (uint8_t)((instruction_word & UINT16_C(0x000f)) |
                    ((instruction_word >> 5) & UINT16_C(0x0010)));
+}
+
+static uint8_t decode_st_source_register(uint16_t instruction_word)
+{
+  return (uint8_t)(((instruction_word >> 4) & UINT16_C(0x000f)) |
+                   ((instruction_word >> 4) & UINT16_C(0x0010)));
 }
 
 bool avr_encode_instruction(const AvrInstruction *instruction,
@@ -109,6 +120,31 @@ bool avr_encode_instruction(const AvrInstruction *instruction,
     return true;
   }
 
+  if (instruction->operation == AVR_OPERATION_LD)
+  {
+    *instruction_word = (uint16_t)(AVR_LD_OPCODE |
+                                   ((uint16_t)instruction->destination_register
+                                    << 4));
+    return true;
+  }
+
+  if (instruction->operation == AVR_OPERATION_ST)
+  {
+    if (!valid_register(instruction->source_register))
+    {
+      return false;
+    }
+
+    *instruction_word = (uint16_t)(AVR_ST_OPCODE |
+                                   ((uint16_t)(instruction->source_register &
+                                               UINT8_C(0x10))
+                                    << 4) |
+                                   ((uint16_t)(instruction->source_register &
+                                               UINT8_C(0x0f))
+                                    << 4));
+    return true;
+  }
+
   return false;
 }
 
@@ -168,6 +204,25 @@ bool avr_decode_instruction_word(uint16_t instruction_word,
     instruction->destination_register =
         (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
     instruction->source_register = 0;
+    instruction->immediate = 0;
+    return true;
+  }
+
+  if ((instruction_word & AVR_LD_MASK) == AVR_LD_OPCODE)
+  {
+    instruction->operation = AVR_OPERATION_LD;
+    instruction->destination_register =
+        (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
+    instruction->source_register = 0;
+    instruction->immediate = 0;
+    return true;
+  }
+
+  if ((instruction_word & AVR_ST_MASK) == AVR_ST_OPCODE)
+  {
+    instruction->operation = AVR_OPERATION_ST;
+    instruction->destination_register = 0;
+    instruction->source_register = decode_st_source_register(instruction_word);
     instruction->immediate = 0;
     return true;
   }
@@ -277,12 +332,29 @@ static bool valid_register(uint8_t register_index)
   return register_index < AVR_REGISTER_COUNT;
 }
 
+static bool read_x_pointer(const AvrMCU *mcu, uint16_t *address)
+{
+  uint8_t x_low;
+  uint8_t x_high;
+
+  if (mcu == NULL || address == NULL ||
+      !avr_mcu_read_register(mcu, 26, &x_low) ||
+      !avr_mcu_read_register(mcu, 27, &x_high))
+  {
+    return false;
+  }
+
+  *address = (uint16_t)(((uint16_t)x_high << 8) | x_low);
+  return true;
+}
+
 bool avr_execute_instruction(AvrMCU *cpu, const AvrInstruction *instruction)
 {
   uint8_t destination;
   uint8_t source;
   uint8_t result;
   uint8_t flags;
+  uint16_t x_address;
 
   if (cpu == NULL || instruction == NULL ||
       !valid_register(instruction->destination_register))
@@ -359,6 +431,26 @@ bool avr_execute_instruction(AvrMCU *cpu, const AvrInstruction *instruction)
                                        (AVR_SREG_I | AVR_SREG_T | AVR_SREG_H |
                                         AVR_SREG_C)) |
                                       flags));
+  }
+  else if (instruction->operation == AVR_OPERATION_LD)
+  {
+    if (!read_x_pointer(cpu, &x_address) ||
+        !avr_mcu_read_data(cpu, x_address, &source))
+    {
+      return false;
+    }
+
+    avr_mcu_write_register(cpu, instruction->destination_register, source);
+  }
+  else if (instruction->operation == AVR_OPERATION_ST)
+  {
+    if (!valid_register(instruction->source_register) ||
+        !read_x_pointer(cpu, &x_address) ||
+        !avr_mcu_read_register(cpu, instruction->source_register, &source) ||
+        !avr_mcu_write_data(cpu, x_address, source))
+    {
+      return false;
+    }
   }
   else
   {
