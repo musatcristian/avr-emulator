@@ -1,0 +1,495 @@
+## Phase 3 — SRAM + Register-Indirect Memory Access
+
+**Goal:** add the next smallest hardware layer after simulated Flash:
+
+> `CPU registers` + `X pointer` + `SRAM` + `LD`/`ST`
+
+Phase 2 established the instruction pipeline:
+
+```text
+Flash[PC]
+	↓
+fetch 16-bit word
+	↓
+decode
+	↓
+execute
+	↓
+CPU state
+```
+
+Phase 3 should extend that pipeline so an instruction can move a value between
+the CPU registers and simulated data memory:
+
+```text
+Flash
+  ↓
+fetch
+  ↓
+decode
+  ↓
+execute LD/ST
+  ↓
+SRAM or registers
+```
+
+Keep this phase deliberately narrow. The purpose is to establish a reusable
+data-memory boundary and prove that real encoded AVR instructions can use it.
+Do not begin GPIO, memory-mapped I/O, branching, stack behavior, or a GUI yet.
+
+---
+
+## 1. Define the Phase 3 subset
+
+This phase is an AVR-inspired subset, not a complete ATmega328P data-space
+implementation.
+
+Support only:
+
+- A fixed SRAM array with a small size, such as 256 bytes
+- Zero-based byte offsets for SRAM addresses
+- The `X` pointer formed from `R27:R26`
+- `LD Rd, X`
+- `ST X, Rr`
+- 16-bit instruction words only
+- Existing Phase 1 and Phase 2 instructions and behavior
+
+The supported data path is:
+
+```text
+R27:R26
+	 ↓
+  X address
+	 ↓
+ SRAM[ X ]
+```
+
+For this phase, the emulator does not model the complete AVR data address
+space. In particular, an SRAM address is not an I/O address, a register-file
+alias, or a peripheral address. The value of `X` is interpreted directly as a
+zero-based index into the Phase 3 SRAM array.
+
+This simplification should be documented clearly so that later memory-map
+work can replace or extend the contract without pretending that the current
+model is a complete ATmega328P implementation.
+
+---
+
+## 2. Add simulated SRAM
+
+Add a fixed-size byte array to `AvrMCU`, alongside the existing register,
+`SREG`, `PC`, and Flash state.
+
+Conceptually:
+
+```text
+SRAM
+┌──────┬──────┬──────┬──────┬──────┬─────┐
+│ 0x00 │ 0x01 │ 0x02 │ 0x03 │ 0x04 │ ... │
+└──────┴──────┴──────┴──────┴──────┴─────┘
+	 ↑
+	X
+```
+
+### SRAM size
+
+Define the size as a named constant in the public MCU header rather than
+scattering the number throughout the implementation. A 256-byte region is
+large enough to exercise a 16-bit pointer while keeping the model and tests
+easy to inspect.
+
+The size is intentionally smaller than the real ATmega328P SRAM. Do not add
+the full device memory map merely to make the constant look realistic.
+
+### Reset behavior
+
+`avr_mcu_reset` must clear every SRAM byte to zero, just as it establishes
+known values for the existing CPU state. This gives tests and future tools a
+deterministic starting point.
+
+Reset should continue to clear or initialize:
+
+- `R0` through `R31`
+- `PC`
+- `SREG`
+- Flash state according to the existing Phase 2 contract
+- SRAM
+
+Do not introduce persistence across resets in this phase.
+
+### Data-memory API
+
+Add explicit MCU-level accessors with a success/failure result. The exact
+function names should follow the existing naming style, for example:
+
+```c
+bool avr_mcu_read_data(const AvrMCU *mcu, uint16_t address, uint8_t *value);
+bool avr_mcu_write_data(AvrMCU *mcu, uint16_t address, uint8_t value);
+```
+
+The read function should write to its output parameter only on success. Both
+functions should reject `address >= AVR_SRAM_SIZE`.
+
+Invalid accesses must not mutate state:
+
+- An invalid read must not modify the output value.
+- An invalid write must not modify SRAM.
+- The accessors should safely reject a null MCU pointer or null read output
+  pointer if that matches the defensive behavior already used by the MCU
+  memory APIs.
+
+Do not expose a second public API that bypasses the bounds checks. Instruction
+execution should use these accessors so direct memory tests and instruction
+tests exercise the same contract.
+
+---
+
+## 3. Add `LD` and `ST` instruction representations
+
+Extend `AvrOperation` with two operations:
+
+```text
+LD
+ST
+```
+
+Reuse the existing `AvrInstruction` operand fields instead of creating a new
+instruction structure.
+
+For the supported forms:
+
+```text
+LD Rd, X
+ST X, Rr
+```
+
+interpret the existing register fields as follows:
+
+```text
+LD: destination register = Rd
+ST: source register      = Rr
+```
+
+The pointer is implicit. The instruction does not need an additional pointer
+operand because this phase supports only `X`.
+
+Reject invalid register operands according to the existing instruction API.
+For example, a constructed `LD` or `ST` instruction must not silently accept
+an out-of-range register number.
+
+Do not add any of these forms yet:
+
+- `LD`/`ST` with `Y` or `Z`
+- `LD`/`ST` with displacement
+- Pre-decrement addressing
+- Post-increment addressing
+- `LDS` or `STS`
+- 32-bit instructions
+
+Those variants introduce additional encoding and pointer semantics that are
+not needed to prove the Phase 3 memory boundary.
+
+---
+
+## 4. Implement the AVR machine-code encodings
+
+Study the AVR instruction-set manual and implement the exact 16-bit encodings
+for the two supported X-pointer forms.
+
+The relevant layouts are:
+
+```text
+LD Rd, X:
+1001 000d dddd 1100
+
+ST X, Rr:
+1001 001r rrrr 1100
+```
+
+The register number occupies five encoded bits. Keep the encoding and
+decoding logic consistent with the five existing instructions.
+
+### Encoding requirements
+
+The encoder should:
+
+- Select the correct opcode for `LD` or `ST`.
+- Insert the register number into the correct bit positions.
+- Reject invalid instruction objects rather than producing an ambiguous word.
+- Return failure in the same way as the existing encoder API.
+
+### Decoding requirements
+
+The decoder should:
+
+- Recognize only the supported `LD Rd, X` and `ST X, Rr` patterns.
+- Extract the five-bit register number.
+- Populate the same `AvrInstruction` representation used by direct tests.
+- Reject unknown or unsupported words without producing an executable
+  instruction.
+
+Add exact-word tests, not only round-trip tests. A round trip can pass even if
+both the encoder and decoder share the same incorrect bit layout.
+
+---
+
+## 5. Connect execution to SRAM
+
+Add the minimum execution behavior needed for the two instructions.
+
+### Forming the X address
+
+The X pointer is the 16-bit value:
+
+```text
+X = (R27 << 8) | R26
+```
+
+Use the existing register access or state representation consistently with the
+current instruction implementation. Avoid adding a separate cached X field;
+the register pair is the source of truth.
+
+### `LD Rd, X`
+
+Execution should:
+
+1. Read `R27` and `R26`.
+2. Form the 16-bit X address.
+3. Read one byte from SRAM through the MCU data-memory API.
+4. Write the byte into `Rd`.
+5. Leave `SREG` unchanged.
+6. Advance `PC` by one word only after the operation succeeds.
+
+### `ST X, Rr`
+
+Execution should:
+
+1. Read `R27` and `R26`.
+2. Form the 16-bit X address.
+3. Read the source value from `Rr`.
+4. Write one byte to SRAM through the MCU data-memory API.
+5. Leave registers and `SREG` unchanged.
+6. Advance `PC` by one word only after the operation succeeds.
+
+Neither instruction changes arithmetic flags. In particular, `LD` and `ST`
+must preserve `I`, `T`, `H`, `S`, `V`, `N`, `Z`, and `C`.
+
+### Failure behavior
+
+With a 256-byte SRAM, any X address from `0x0100` through `0xFFFF` is out of
+range. A failed memory instruction must not partially mutate CPU state.
+
+For an invalid `LD`:
+
+- The destination register remains unchanged.
+- SRAM remains unchanged.
+- `SREG` remains unchanged.
+- `PC` remains unchanged.
+
+For an invalid `ST`:
+
+- SRAM remains unchanged.
+- All registers remain unchanged.
+- `SREG` remains unchanged.
+- `PC` remains unchanged.
+
+This ordering matters. Do not write the destination register or advance the
+program counter before confirming that the SRAM read or write succeeded.
+
+Keep `avr_mcu_step` responsible for the Phase 2 orchestration:
+
+```text
+read Flash[PC]
+	 ↓
+decode one word
+	 ↓
+execute instruction
+	 ↓
+advance PC after success
+```
+
+Do not move Flash fetching into the instruction implementation.
+
+---
+
+## 6. Add focused Phase 3 tests
+
+Create `tests/test_phase3.c` following the existing `assert`-based test style,
+and register its test functions in `tests/test_runner.c` using the existing
+pattern. Keep all Phase 1 and Phase 2 tests intact.
+
+### SRAM API tests
+
+Cover:
+
+- A freshly reset SRAM region reads as zero.
+- Address `0x0000` can be written and read.
+- Address `AVR_SRAM_SIZE - 1` can be written and read.
+- Written values persist until overwritten or reset.
+- An address equal to `AVR_SRAM_SIZE` is rejected.
+- A large 16-bit address such as `0xFFFF` is rejected.
+- Invalid writes do not change a neighboring valid byte.
+- Invalid reads do not modify the caller's output value.
+- Reset clears values previously written to SRAM.
+
+Use values such as `0x00`, `0x01`, `0x55`, and `0xFF` so that the tests cover
+both zero and alternating bit patterns.
+
+### Encoding and decoding tests
+
+Cover:
+
+- Exact expected machine-code words for representative `LD` instructions.
+- Exact expected machine-code words for representative `ST` instructions.
+- Register values at the lower and upper ends of the five-bit register field.
+- Decode results for both opcode patterns.
+- Encode/decode round trips for several valid registers.
+- Unknown words are rejected.
+- Invalid constructed instructions are rejected.
+
+The exact-word assertions should be based on the AVR instruction-set manual,
+not generated by calling the encoder from inside the test.
+
+### Direct execution tests
+
+Cover:
+
+- `ST X, Rr` stores a register value at a valid low SRAM address.
+- `ST X, Rr` stores a value at `AVR_SRAM_SIZE - 1` using the high byte of X.
+- `LD Rd, X` loads the value at a valid SRAM address.
+- The X pointer is correctly formed from `R27` as the high byte and `R26` as
+  the low byte.
+- `LD` and `ST` do not change `SREG`.
+- The source register is unchanged by `ST`.
+- A failed `LD` leaves the destination register unchanged.
+- A failed `ST` leaves SRAM unchanged.
+- Direct instruction execution advances `PC` only on success, following the
+  existing execution contract.
+
+### Encoded integration test
+
+Add at least one program that proves the complete Phase 2 plus Phase 3 path.
+For example:
+
+```text
+1. LDI R26, low SRAM address
+2. LDI R27, high SRAM address
+3. LDI R16, test value
+4. ST X, R16
+5. LD R17, X
+6. INC R17
+```
+
+Load the encoded words into Flash, reset the MCU, and call `avr_mcu_step` once
+per instruction. Verify:
+
+- The X pointer registers contain the expected address.
+- SRAM contains the value written by `ST`.
+- `LD` places that value in `R17`.
+- The existing instruction changes `R17` as expected.
+- `PC` advances by one word for each successful instruction.
+- The final `SREG` behavior still matches the existing `INC` semantics.
+
+This test must use encoded words loaded into Flash. A test that directly calls
+the instruction executor alone does not prove the new fetch/decode path.
+
+---
+
+## 7. Keep the CLI and documentation proportional
+
+The Phase 1 CLI currently demonstrates manually constructed instructions. If
+updating it is straightforward, change it to load encoded words into Flash
+and step through a tiny SRAM program.
+
+The demonstration only needs to print:
+
+```text
+PC
+R26 / R27
+X
+R16 / R17
+SRAM[X]
+SREG
+```
+
+Do not add a command parser, assembler, binary loader, or graphical interface
+to the CLI in this phase. The CLI is a debugging aid, not a second emulator
+implementation.
+
+Add a short Phase 3 section to `README.md` covering:
+
+- The fixed SRAM size.
+- Zero-based SRAM addressing for this phase.
+- The X-pointer definition.
+- The supported `LD Rd, X` and `ST X, Rr` forms.
+- The fact that I/O and GPIO are not implemented yet.
+
+---
+
+## 8. Suggested implementation order
+
+Make the work incremental so each step has a small, testable result:
+
+1. Add the SRAM constant, state field, reset behavior, and bounded accessors.
+2. Add SRAM API tests and run the existing test suite.
+3. Add `LD` and `ST` operation values and instruction validation.
+4. Add exact encoding and decoding support.
+5. Add encoding/decoding tests and run the full suite.
+6. Add X-pointer address formation and execution behavior.
+7. Add direct execution and failure-semantics tests.
+8. Add the encoded Flash integration test.
+9. Update the CLI only if it remains a small change.
+10. Add the README summary and run the complete verification commands.
+
+At each stage, preserve the existing public behavior of Phase 1 and Phase 2.
+Avoid refactoring unrelated APIs while the new memory path is being added.
+
+---
+
+## Phase 3 definition of done
+
+Phase 3 is complete when all of the following are true:
+
+```text
+Reset MCU
+	↓
+Initialize deterministic SRAM
+	↓
+Load encoded 16-bit instructions into Flash
+	↓
+Fetch and decode LD/ST through avr_mcu_step
+	↓
+Form X from R27:R26
+	↓
+Read/write bounded SRAM
+	↓
+Update registers without changing SREG
+	↓
+Advance PC only after successful execution
+```
+
+The emulator must be able to run a tiny encoded program that stores a value
+from a register to SRAM and loads it back into another register. Valid memory
+operations must work at the lowest and highest supported SRAM addresses.
+Invalid addresses and unsupported instructions must fail without partial
+state mutation. All Phase 1 and Phase 2 tests must remain green under the
+existing strict-warning build.
+
+### Explicitly out of scope
+
+- `PORTB`, `DDRB`, `PINB`, or any GPIO behavior
+- `IN`, `OUT`, `SBI`, or other I/O instructions
+- AVR register-file and I/O-space memory aliases
+- Y and Z pointer addressing
+- Displacement, pre-decrement, or post-increment addressing
+- `LDS`, `STS`, or any 32-bit instruction
+- Branches, loops, calls, returns, or stack behavior
+- Stack pointer implementation
+- Interrupts, timers, UART, SPI, I2C, EEPROM, and cycle timing
+- ELF, Intel HEX, assembler, or other binary loading
+- GUI or visualizer work
+- Full ATmega328P SRAM sizing or complete data-memory fidelity
+- Broad cleanup of existing null-handling or public API behavior
+
+The key achievement of Phase 3 is that the emulator now has a real, bounded
+data-memory path: **machine code → instruction → X pointer → SRAM → register**.
