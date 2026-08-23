@@ -1,0 +1,116 @@
+## Plan: Phase 4 GPIO and I/O
+
+Phase 4 adds the first hardware-facing feature: a small generic I/O register boundary and one 8-bit GPIO port. The CPU will execute real 16-bit `IN` and `OUT` instructions against symbolic compact I/O IDs, while Phase 3's zero-based SRAM API remains unchanged. GPIO state is modeled as `DDRB` direction, `PORTB` output latch, and externally supplied pin input state; `PINB` is read-only to the CPU and reports the resulting actual pin levels.
+
+**Steps**
+
+### 1. Establish the Phase 4 hardware contract
+
+- Add public symbolic I/O identifiers for `PINB`, `DDRB`, and `PORTB`, each within the 6-bit operand range required by AVR-style `IN`/`OUT` encodings. Do not claim real ATmega328P numeric addresses and do not change `avr_mcu_read_data`/`avr_mcu_write_data`.
+- Add an 8-bit external-input field to `AvrMCU` alongside `ddrb` and `portb` state, or use an equivalent representation consistent with the existing public struct style.
+- Define read behavior:
+  - `DDRB` reads the direction mask.
+  - `PORTB` reads the output latch.
+  - `PINB` reads `(PORTB & DDRB) | (external_input & ~DDRB)`, so output-configured pins reflect the latch and input-configured pins reflect externally supplied levels.
+- Define write behavior:
+  - `DDRB` writes the direction mask.
+  - `PORTB` writes the output latch.
+  - `PINB` writes are rejected and do not mutate state.
+- Add explicit MCU-level I/O APIs, such as bounded `avr_mcu_read_io` and `avr_mcu_write_io`, plus an API to set/read external pin input state. Invalid IDs and null pointers fail without mutation. The external input setter should be the only way tests or a future UI drive input pins.
+- Reset must clear direction, output latch, and external input state, while retaining all Phase 1-3 reset behavior.
+
+### 2. Add `IN` and `OUT` instruction representations and encoding
+
+- Extend `AvrOperation` with `AVR_OPERATION_IN` and `AVR_OPERATION_OUT`.
+- Reuse `AvrInstruction` fields:
+  - `IN`: `destination_register = Rd`, `immediate = io_id`.
+  - `OUT`: `source_register = Rr`, `immediate = io_id`.
+- Validate all register operands and require I/O IDs no greater than `0x3f`; reject malformed instruction objects.
+- Implement exact 16-bit AVR-style layouts:
+  - `IN Rd, A`: `1011 0AAd dddd AAAA`.
+  - `OUT A, Rr`: `1011 1AAr rrrr AAAA`.
+- Decode only those patterns, extract the 6-bit I/O ID and 5-bit register number, and reject neighboring unsupported words. Preserve the existing behavior that decoder failure does not produce an executable instruction.
+- Add exact-word assertions for representative low/high I/O IDs and registers at both operand boundaries. Add round-trip tests without relying only on round trips.
+
+### 3. Connect instruction execution to the I/O boundary
+
+- Implement `IN` by reading the selected I/O register through `avr_mcu_read_io`, writing the returned value to `Rd`, leaving `SREG` unchanged, and incrementing `PC` only after both operations succeed.
+- Implement `OUT` by reading `Rr`, writing through `avr_mcu_write_io`, leaving all registers except the selected hardware state unchanged, and incrementing `PC` only after the write succeeds.
+- Ensure invalid I/O IDs, rejected `PINB` writes, invalid register operands, and null inputs fail atomically: no register, GPIO state, `SREG`, or `PC` changes.
+- Keep `avr_mcu_step` responsible for fetch/decode/execute. Do not move Flash access or pipeline orchestration into the instruction implementation.
+- Preserve all existing Phase 1-3 semantics and tests, including X/SRAM behavior and PC advancement.
+
+### 4. Add focused Phase 4 tests
+
+Create `tests/test_phase4.c` and `tests/test_phase4.h`, following the existing assert-based phase organization, and register all tests in `tests/test_runner.c`.
+
+- Reset and I/O API tests:
+  - Reset clears `DDRB`, `PORTB`, and external input state.
+  - Valid reads/writes work for each writable register.
+  - Invalid I/O IDs and null arguments fail without changing output values or state.
+  - `PINB` writes are rejected and preserve `PORTB` and `PINB`.
+  - External input can be set and read through the defined API.
+- GPIO semantics tests:
+  - With `DDRB = 0`, `PINB` reflects external input.
+  - With `DDRB = 0xff`, `PINB` reflects `PORTB` regardless of external input.
+  - With mixed direction bits, output bits come from `PORTB` and input bits come from external input.
+  - Changing `DDRB`, `PORTB`, or external input updates later `PINB` reads deterministically.
+- Encoding/decoding tests:
+  - Exact expected machine words for representative `IN` and `OUT` instructions.
+  - Lowest and highest valid register and compact I/O ID values.
+  - Invalid registers and I/O IDs rejected by the encoder.
+  - Both instruction patterns decode correctly; neighboring unsupported words are rejected.
+  - Several valid encode/decode round trips succeed.
+- Direct execution tests:
+  - `OUT` updates `DDRB` and `PORTB` through the instruction API.
+  - `IN` reads `PINB`, `DDRB`, and `PORTB` into a CPU register.
+  - `IN` and `OUT` preserve a sentinel `SREG` value.
+  - Source registers remain unchanged after `OUT`.
+  - Rejected `OUT PINB` and invalid I/O operations preserve all state and `PC`.
+- Encoded integration test:
+  - Load machine code through Flash and step an `LDI -> OUT DDRB -> LDI -> OUT PORTB -> IN PINB` program.
+  - Verify register values, direction/latch state, actual `PINB` value, unchanged arithmetic flags, and one-word PC advancement after every successful step.
+  - Include an external input value so the test proves mixed input/output behavior rather than only latch readback.
+
+### 5. Keep the CLI and documentation proportional
+
+- Update `src/main/main.c` only as a small text demonstration if the existing shape remains simple: configure one output bit, set `PORTB`, read `PINB`, and print `DDRB`, `PORTB`, `external input`, and `PINB` alongside the existing CPU state.
+- Add a Phase 4 README section documenting the generic symbolic I/O IDs, the three GPIO registers, direction/latch/actual-pin semantics, read-only `PINB` writes, and the fact that the IDs are not a complete ATmega328P memory map.
+- Correct the Makefile test help text to include Phase 3 and Phase 4, and add the Phase 4 test files to the test target dependencies.
+- Do not add GUI, SDL/raylib, command parsing, timers, interrupts, `RJMP`, `SBI`/`CBI`, or full AVR data-space mapping in this phase.
+
+**Relevant files**
+
+- `/Users/2305922/Code/C/avr-emulator/include/avr_mcu.h` — public GPIO state, symbolic I/O IDs, and I/O/external-input API declarations.
+- `/Users/2305922/Code/C/avr-emulator/src/mcu/avr_mcu.c` — reset behavior and bounded I/O/GPIO read/write implementation.
+- `/Users/2305922/Code/C/avr-emulator/include/avr_instruction.h` — `IN`/`OUT` operation values and shared operand contract.
+- `/Users/2305922/Code/C/avr-emulator/src/instructions/avr_instruction.c` — exact encoder/decoder patterns and execution branches using MCU I/O APIs.
+- `/Users/2305922/Code/C/avr-emulator/tests/test_phase4.c` — focused API, GPIO, encoding, execution, failure, and integration tests.
+- `/Users/2305922/Code/C/avr-emulator/tests/test_phase4.h` — Phase 4 test declarations.
+- `/Users/2305922/Code/C/avr-emulator/tests/test_runner.c` — Phase 4 test registration.
+- `/Users/2305922/Code/C/avr-emulator/src/main/main.c` — optional compact GPIO CLI demonstration.
+- `/Users/2305922/Code/C/avr-emulator/README.md` — Phase 4 scope and behavior contract.
+- `/Users/2305922/Code/C/avr-emulator/Makefile` — Phase 4 test dependencies and help text.
+
+**Verification**
+
+1. Add each API/state slice incrementally and run `make test` after the MCU API tests, after instruction encoding/decoding, and after execution/integration tests.
+2. Build with the existing strict flags via `make build`; ensure no new warnings under `-std=c17 -Wall -Wextra -Wpedantic`.
+3. Run `make run` and confirm the CLI output distinguishes direction, output latch, external input, and actual pin state.
+4. Exercise failure atomicity directly in tests for invalid I/O IDs and rejected `PINB` writes, including unchanged `PC` and `SREG`.
+5. Manually inspect exact `IN`/`OUT` machine words against the AVR instruction layouts; do not use encoder output as the expected value in those assertions.
+
+**Decisions**
+
+- Phase 4 scope is `IN`/`OUT` plus one GPIO port; `RJMP` is deferred to a later control-flow phase.
+- GPIO uses generic named registers with compact symbolic I/O IDs, not ATmega328P physical addresses. The model remains AVR-inspired and intentionally partial.
+- `DDRB` is direction, `PORTB` is the output latch, and `PINB` is actual pin state.
+- Actual pin state is computed from output latch for output-configured bits and externally supplied input state for input-configured bits.
+- CPU writes to `PINB` are rejected in this phase; AVR PIN-toggle semantics are deferred.
+- Phase 3 SRAM remains a separate zero-based storage API; no unified AVR data-space map is introduced.
+- No GUI work occurs in Phase 4; the emulator remains independently testable and headless.
+
+**Scope boundaries**
+
+- Included: deterministic reset, bounded symbolic I/O access, external pin input injection, GPIO direction/latch/read semantics, exact 16-bit `IN`/`OUT`, direct and encoded tests, proportional CLI/docs updates.
+- Excluded: real ATmega328P addresses, complete I/O/data memory aliases, PIN toggle writes, Y/Z addressing, branches/loops, timers, interrupts, UART, cycle timing, ELF/HEX loading, and visualizer implementation.
