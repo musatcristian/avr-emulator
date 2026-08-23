@@ -3,6 +3,7 @@
 #include "test_phase1.h"
 #include "test_phase2.h"
 #include "test_phase3.h"
+#include "test_phase4.h"
 
 int main(void)
 {
@@ -25,6 +26,12 @@ int main(void)
   test_ld_st_direct_execution();
   test_ld_st_failure_semantics();
   test_phase3_machine_code_integration();
+  test_gpio_io_api();
+  test_gpio_pin_semantics();
+  test_in_out_instruction_encoding();
+  test_in_out_instruction_decoding_and_roundtrip();
+  test_in_out_direct_execution();
+  test_phase4_machine_code_integration();
   printf("All tests passed!\n");
   return 0;
 }

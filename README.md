@@ -87,6 +87,22 @@ Not implemented yet:
 - Y/Z pointer modes and displacement forms
 - `LDS`/`STS` and 32-bit instructions
 
+## Phase 4 Summary
+
+Phase 4 adds a small symbolic I/O boundary and an 8-bit GPIO port.
+
+- `AVR_IO_PINB` is the read-only actual pin state register.
+- `AVR_IO_DDRB` controls which port bits are outputs.
+- `AVR_IO_PORTB` stores the output latch.
+- `PINB` reads output-configured bits from `PORTB` and input-configured bits
+  from the externally supplied input state.
+- CPU writes to `PINB` are rejected; `DDRB` and `PORTB` are writable.
+- `IN` and `OUT` use 16-bit instruction encodings and the symbolic I/O IDs.
+
+The I/O IDs are compact emulator identifiers, not real ATmega328P addresses.
+Phase 4 does not implement a complete AVR data-space map, PIN toggle writes,
+timers, interrupts, or a visualizer.
+
 ## Build and Test
 
 - Build emulator: `make build`

@@ -12,7 +12,11 @@ static void print_mcu(const AvrMCU *mcu)
 {
   uint16_t x = read_x(mcu);
   uint8_t data = 0;
+  uint8_t pinb = 0;
+  uint8_t external_input = 0;
   bool data_ok = avr_mcu_read_data(mcu, x, &data);
+  bool pinb_ok = avr_mcu_read_io(mcu, AVR_IO_PINB, &pinb);
+  bool external_input_ok = avr_mcu_read_external_input(mcu, &external_input);
 
   printf("PC:   %04x\n", (unsigned int)avr_mcu_read_pc(mcu));
   printf("R26:  %02x\n", (unsigned int)mcu->registers[26]);
@@ -20,6 +24,7 @@ static void print_mcu(const AvrMCU *mcu)
   printf("X:    %04x\n", (unsigned int)x);
   printf("R16:  %02x\n", (unsigned int)mcu->registers[16]);
   printf("R17:  %02x\n", (unsigned int)mcu->registers[17]);
+  printf("R18:  %02x\n", (unsigned int)mcu->registers[18]);
   if (data_ok)
   {
     printf("SRAM[X]: %02x\n", (unsigned int)data);
@@ -27,6 +32,16 @@ static void print_mcu(const AvrMCU *mcu)
   else
   {
     printf("SRAM[X]: --\n");
+  }
+  if (pinb_ok)
+  {
+    printf("DDRB: %02x\n", (unsigned int)mcu->ddrb);
+    printf("PORTB: %02x\n", (unsigned int)mcu->portb);
+    if (external_input_ok)
+    {
+      printf("External input: %02x\n", (unsigned int)external_input);
+    }
+    printf("PINB: %02x\n", (unsigned int)pinb);
   }
   printf("SREG: %02x\n", (unsigned int)avr_mcu_read_sreg(mcu));
 }
@@ -61,7 +76,22 @@ const AvrInstruction program[] = {
     {.operation = AVR_OPERATION_LD,
      .destination_register = 17},
     {.operation = AVR_OPERATION_INC,
-     .destination_register = 17}};
+     .destination_register = 17},
+    {.operation = AVR_OPERATION_LDI,
+     .destination_register = 16,
+     .immediate = 0xaa},
+    {.operation = AVR_OPERATION_OUT,
+     .source_register = 16,
+     .immediate = AVR_IO_DDRB},
+    {.operation = AVR_OPERATION_LDI,
+     .destination_register = 16,
+     .immediate = 0xf0},
+    {.operation = AVR_OPERATION_OUT,
+     .source_register = 16,
+     .immediate = AVR_IO_PORTB},
+    {.operation = AVR_OPERATION_IN,
+     .destination_register = 18,
+     .immediate = AVR_IO_PINB}};
 
 const char *step_names[] = {
     "LDI R26, 0x22",
@@ -69,12 +99,23 @@ const char *step_names[] = {
     "LDI R16, 0x55",
     "ST X, R16",
     "LD R17, X",
-    "INC R17"};
+    "INC R17",
+    "LDI R16, 0xaa",
+    "OUT DDRB, R16",
+    "LDI R16, 0xf0",
+    "OUT PORTB, R16",
+    "IN R18, PINB"};
 
 int main(void)
 {
   AvrMCU mcu = avr_mcu_create();
   uint16_t machine_code[sizeof(program) / sizeof(program[0])];
+
+  if (!avr_mcu_write_external_input(&mcu, 0x0f))
+  {
+    fprintf(stderr, "Failed to set external input\n");
+    return 1;
+  }
 
   for (size_t index = 0; index < sizeof(program) / sizeof(program[0]); ++index)
   {

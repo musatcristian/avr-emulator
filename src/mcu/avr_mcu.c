@@ -102,6 +102,76 @@ bool avr_mcu_write_data(AvrMCU *mcu, uint16_t address, uint8_t value)
   return true;
 }
 
+bool avr_mcu_read_io(const AvrMCU *mcu, uint8_t address, uint8_t *value)
+{
+  if (mcu == NULL || value == NULL)
+  {
+    return false;
+  }
+
+  if (address == AVR_IO_PINB)
+  {
+    *value = (uint8_t)((mcu->portb & mcu->ddrb) |
+                       (mcu->external_input & (uint8_t)~mcu->ddrb));
+    return true;
+  }
+  if (address == AVR_IO_DDRB)
+  {
+    *value = mcu->ddrb;
+    return true;
+  }
+  if (address == AVR_IO_PORTB)
+  {
+    *value = mcu->portb;
+    return true;
+  }
+
+  return false;
+}
+
+bool avr_mcu_write_io(AvrMCU *mcu, uint8_t address, uint8_t value)
+{
+  if (mcu == NULL)
+  {
+    return false;
+  }
+
+  if (address == AVR_IO_DDRB)
+  {
+    mcu->ddrb = value;
+    return true;
+  }
+  if (address == AVR_IO_PORTB)
+  {
+    mcu->portb = value;
+    return true;
+  }
+
+  return false;
+}
+
+bool avr_mcu_read_external_input(const AvrMCU *mcu, uint8_t *value)
+{
+  if (mcu == NULL || value == NULL)
+  {
+    return false;
+  }
+
+  *value = mcu->external_input;
+  return true;
+}
+
+bool avr_mcu_write_external_input(AvrMCU *mcu, uint8_t value)
+{
+  if (mcu == NULL)
+  {
+    return false;
+  }
+
+  mcu->external_input = value;
+  return true;
+}
+
 bool avr_mcu_load_program(AvrMCU *mcu, const uint16_t *program,
                           size_t instruction_count)
 {
