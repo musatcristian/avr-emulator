@@ -20,7 +20,14 @@ typedef enum
   AVR_OPERATION_RJMP,
   AVR_OPERATION_BRNE,
   AVR_OPERATION_BREQ,
-  AVR_OPERATION_DEC
+  AVR_OPERATION_DEC,
+  AVR_OPERATION_AND,
+  AVR_OPERATION_OR,
+  AVR_OPERATION_EOR,
+  AVR_OPERATION_CP,
+  AVR_OPERATION_CPI,
+  AVR_OPERATION_SBI,
+  AVR_OPERATION_CBI
 } AvrOperation;
 
 typedef struct
@@ -29,6 +36,7 @@ typedef struct
   uint8_t destination_register;
   uint8_t source_register;
   uint8_t immediate;
+  uint8_t bit_index;
   int16_t relative_offset;
 } AvrInstruction;
 

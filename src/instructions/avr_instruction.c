@@ -29,7 +29,21 @@ enum
   AVR_BREQ_MASK = 0xfc07,
   AVR_BREQ_OPCODE = 0xf001,
   AVR_DEC_MASK = 0xfe0f,
-  AVR_DEC_OPCODE = 0x940a
+  AVR_DEC_OPCODE = 0x940a,
+  AVR_AND_MASK = 0xfc00,
+  AVR_AND_OPCODE = 0x2000,
+  AVR_OR_MASK = 0xfc00,
+  AVR_OR_OPCODE = 0x2800,
+  AVR_EOR_MASK = 0xfc00,
+  AVR_EOR_OPCODE = 0x2400,
+  AVR_CP_MASK = 0xfc00,
+  AVR_CP_OPCODE = 0x1400,
+  AVR_CPI_MASK = 0xf000,
+  AVR_CPI_OPCODE = 0x3000,
+  AVR_SBI_MASK = 0xff00,
+  AVR_SBI_OPCODE = 0x9a00,
+  AVR_CBI_MASK = 0xff00,
+  AVR_CBI_OPCODE = 0x9800
 };
 
 static bool valid_register(uint8_t register_index);
@@ -51,6 +65,16 @@ static uint8_t decode_source_register(uint16_t instruction_word)
 {
   return (uint8_t)((instruction_word & UINT16_C(0x000f)) |
                    ((instruction_word >> 5) & UINT16_C(0x0010)));
+}
+
+static uint8_t decode_bit_index(uint16_t instruction_word)
+{
+  return (uint8_t)(instruction_word & UINT16_C(0x0007));
+}
+
+static uint8_t decode_bit_io_address(uint16_t instruction_word)
+{
+  return (uint8_t)((instruction_word >> 3) & UINT16_C(0x001f));
 }
 
 static uint8_t decode_st_source_register(uint16_t instruction_word)
@@ -225,9 +249,9 @@ bool avr_encode_instruction(const AvrInstruction *instruction,
     *instruction_word = (uint16_t)((instruction->operation == AVR_OPERATION_BRNE
                                         ? AVR_BRNE_OPCODE
                                         : AVR_BREQ_OPCODE) |
-                  (encode_relative_offset(instruction->relative_offset,
-                            7)
-                   << 3));
+                                   (encode_relative_offset(instruction->relative_offset,
+                                                           7)
+                                    << 3));
     return true;
   }
 
@@ -235,6 +259,69 @@ bool avr_encode_instruction(const AvrInstruction *instruction,
   {
     *instruction_word = (uint16_t)(AVR_DEC_OPCODE |
                                    ((uint16_t)instruction->destination_register << 4));
+    return true;
+  }
+
+  if (instruction->operation == AVR_OPERATION_AND ||
+      instruction->operation == AVR_OPERATION_OR ||
+      instruction->operation == AVR_OPERATION_EOR ||
+      instruction->operation == AVR_OPERATION_CP)
+  {
+    if (!valid_register(instruction->source_register))
+    {
+      return false;
+    }
+
+    uint16_t opcode = AVR_AND_OPCODE;
+    if (instruction->operation == AVR_OPERATION_OR)
+    {
+      opcode = AVR_OR_OPCODE;
+    }
+    else if (instruction->operation == AVR_OPERATION_EOR)
+    {
+      opcode = AVR_EOR_OPCODE;
+    }
+    else if (instruction->operation == AVR_OPERATION_CP)
+    {
+      opcode = AVR_CP_OPCODE;
+    }
+
+    *instruction_word = encode_dual_register(opcode,
+                                             instruction->destination_register,
+                                             instruction->source_register);
+    return true;
+  }
+
+  if (instruction->operation == AVR_OPERATION_CPI)
+  {
+    if (instruction->destination_register < 16 ||
+        instruction->destination_register >= AVR_REGISTER_COUNT)
+    {
+      return false;
+    }
+
+    *instruction_word = (uint16_t)(AVR_CPI_OPCODE |
+                                   ((uint16_t)(instruction->immediate & 0xf0) << 4) |
+                                   ((uint16_t)(instruction->destination_register - 16)
+                                    << 4) |
+                                   (instruction->immediate & 0x0f));
+    return true;
+  }
+
+  if (instruction->operation == AVR_OPERATION_SBI ||
+      instruction->operation == AVR_OPERATION_CBI)
+  {
+    if (instruction->immediate > UINT8_C(0x1f) ||
+        instruction->bit_index > UINT8_C(0x07))
+    {
+      return false;
+    }
+
+    *instruction_word = (uint16_t)((instruction->operation == AVR_OPERATION_SBI
+                                        ? AVR_SBI_OPCODE
+                                        : AVR_CBI_OPCODE) |
+                                   ((uint16_t)instruction->immediate << 3) |
+                                   instruction->bit_index);
     return true;
   }
 
@@ -360,7 +447,7 @@ bool avr_decode_instruction_word(uint16_t instruction_word,
     instruction->source_register = 0;
     instruction->immediate = 0;
     instruction->relative_offset = decode_relative_offset((uint16_t)(instruction_word >> 3),
-                                7);
+                                                          7);
     return true;
   }
 
@@ -371,6 +458,61 @@ bool avr_decode_instruction_word(uint16_t instruction_word,
         (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
     instruction->source_register = 0;
     instruction->immediate = 0;
+    instruction->relative_offset = 0;
+    return true;
+  }
+
+  if ((instruction_word & AVR_AND_MASK) == AVR_AND_OPCODE ||
+      (instruction_word & AVR_OR_MASK) == AVR_OR_OPCODE ||
+      (instruction_word & AVR_EOR_MASK) == AVR_EOR_OPCODE ||
+      (instruction_word & AVR_CP_MASK) == AVR_CP_OPCODE)
+  {
+    if ((instruction_word & AVR_AND_MASK) == AVR_AND_OPCODE)
+    {
+      instruction->operation = AVR_OPERATION_AND;
+    }
+    else if ((instruction_word & AVR_OR_MASK) == AVR_OR_OPCODE)
+    {
+      instruction->operation = AVR_OPERATION_OR;
+    }
+    else if ((instruction_word & AVR_EOR_MASK) == AVR_EOR_OPCODE)
+    {
+      instruction->operation = AVR_OPERATION_EOR;
+    }
+    else
+    {
+      instruction->operation = AVR_OPERATION_CP;
+    }
+    instruction->destination_register =
+        (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
+    instruction->source_register = decode_source_register(instruction_word);
+    instruction->immediate = 0;
+    instruction->relative_offset = 0;
+    return true;
+  }
+
+  if ((instruction_word & AVR_CPI_MASK) == AVR_CPI_OPCODE)
+  {
+    instruction->operation = AVR_OPERATION_CPI;
+    instruction->destination_register =
+        (uint8_t)(16 + ((instruction_word >> 4) & UINT16_C(0x000f)));
+    instruction->source_register = 0;
+    instruction->immediate = (uint8_t)((instruction_word & UINT16_C(0x000f)) |
+                                       ((instruction_word >> 4) & UINT16_C(0x00f0)));
+    instruction->relative_offset = 0;
+    return true;
+  }
+
+  if ((instruction_word & AVR_SBI_MASK) == AVR_SBI_OPCODE ||
+      (instruction_word & AVR_CBI_MASK) == AVR_CBI_OPCODE)
+  {
+    instruction->operation = (instruction_word & AVR_SBI_MASK) == AVR_SBI_OPCODE
+                                 ? AVR_OPERATION_SBI
+                                 : AVR_OPERATION_CBI;
+    instruction->destination_register = 0;
+    instruction->source_register = 0;
+    instruction->immediate = decode_bit_io_address(instruction_word);
+    instruction->bit_index = decode_bit_index(instruction_word);
     instruction->relative_offset = 0;
     return true;
   }
@@ -494,6 +636,22 @@ static uint8_t arithmetic_flags_dec(uint8_t result)
   if (((flags & AVR_SREG_N) != 0) != ((flags & AVR_SREG_V) != 0))
   {
     flags |= AVR_SREG_S;
+  }
+
+  return flags;
+}
+
+static uint8_t arithmetic_flags_logical(uint8_t result)
+{
+  uint8_t flags = 0;
+
+  if ((result & UINT8_C(0x80)) != 0)
+  {
+    flags |= AVR_SREG_N | AVR_SREG_S;
+  }
+  if (result == 0)
+  {
+    flags |= AVR_SREG_Z;
   }
 
   return flags;
@@ -713,6 +871,96 @@ bool avr_execute_instruction(AvrMCU *cpu, const AvrInstruction *instruction)
                                        (AVR_SREG_I | AVR_SREG_T | AVR_SREG_H |
                                         AVR_SREG_C)) |
                                       flags));
+  }
+  else if (instruction->operation == AVR_OPERATION_AND ||
+           instruction->operation == AVR_OPERATION_OR ||
+           instruction->operation == AVR_OPERATION_EOR)
+  {
+    if (!valid_register(instruction->source_register) ||
+        !avr_mcu_read_register(cpu, instruction->destination_register,
+                               &destination) ||
+        !avr_mcu_read_register(cpu, instruction->source_register, &source))
+    {
+      return false;
+    }
+
+    if (instruction->operation == AVR_OPERATION_AND)
+    {
+      result = (uint8_t)(destination & source);
+    }
+    else if (instruction->operation == AVR_OPERATION_OR)
+    {
+      result = (uint8_t)(destination | source);
+    }
+    else
+    {
+      result = (uint8_t)(destination ^ source);
+    }
+
+    avr_mcu_write_register(cpu, instruction->destination_register, result);
+    avr_mcu_write_sreg(cpu, (uint8_t)((avr_mcu_read_sreg(cpu) &
+                                       (AVR_SREG_I | AVR_SREG_T | AVR_SREG_H |
+                                        AVR_SREG_C)) |
+                                      arithmetic_flags_logical(result)));
+  }
+  else if (instruction->operation == AVR_OPERATION_CP ||
+           instruction->operation == AVR_OPERATION_CPI)
+  {
+    if (instruction->operation == AVR_OPERATION_CPI &&
+        (instruction->destination_register < 16 ||
+         instruction->destination_register >= AVR_REGISTER_COUNT))
+    {
+      return false;
+    }
+    if (instruction->operation == AVR_OPERATION_CP &&
+        !valid_register(instruction->source_register))
+    {
+      return false;
+    }
+    if (!avr_mcu_read_register(cpu, instruction->destination_register,
+                               &destination))
+    {
+      return false;
+    }
+
+    source = instruction->operation == AVR_OPERATION_CPI
+                 ? instruction->immediate
+                 : instruction->source_register;
+    if (instruction->operation == AVR_OPERATION_CP &&
+        !avr_mcu_read_register(cpu, instruction->source_register, &source))
+    {
+      return false;
+    }
+
+    result = (uint8_t)(destination - source);
+    avr_mcu_write_sreg(cpu, (uint8_t)((avr_mcu_read_sreg(cpu) &
+                                       (AVR_SREG_I | AVR_SREG_T)) |
+                                      arithmetic_flags_sub(destination, source,
+                                                           result)));
+  }
+  else if (instruction->operation == AVR_OPERATION_SBI ||
+           instruction->operation == AVR_OPERATION_CBI)
+  {
+    if (instruction->immediate > UINT8_C(0x1f) ||
+        instruction->bit_index > UINT8_C(0x07) ||
+        !avr_mcu_read_io(cpu, instruction->immediate, &source))
+    {
+      return false;
+    }
+
+    if (instruction->operation == AVR_OPERATION_SBI)
+    {
+      source |= (uint8_t)(UINT8_C(1) << instruction->bit_index);
+    }
+    else
+    {
+      source &= (uint8_t)~(UINT8_C(1) << instruction->bit_index);
+    }
+
+    if (!avr_mcu_write_io(cpu, instruction->immediate, source))
+    {
+      return false;
+    }
   }
   else
   {

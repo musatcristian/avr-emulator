@@ -118,6 +118,22 @@ headless.
 All Phase 5 instructions remain 16-bit words. The conditional branch subset is
 encoded using the AVR `BRBC`/`BRBS` Z-bit forms (`BRNE`/`BREQ` aliases).
 
+## Phase 6 Summary
+
+Phase 6 adds the logical, comparison, and bit operations needed by small
+input-driven programs.
+
+- Register operations: `AND`, `OR`, and `EOR`.
+- Comparisons: `CP` for two registers and `CPI` for `R16` through `R31`.
+- I/O bit operations: `SBI` and `CBI` for I/O IDs 0 through 31 and bits 0
+  through 7.
+- Logical operations update `Z`, `N`, and `S` and clear `V`; `CP` and `CPI`
+  update the subtraction flags without changing registers; `SBI` and `CBI`
+  preserve `SREG`.
+
+`SBI` and `CBI` use the existing symbolic I/O API, so unsupported or read-only
+registers fail without changing the MCU.
+
 ## Build and Test
 
 - Build emulator: `make build`
