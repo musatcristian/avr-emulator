@@ -81,7 +81,6 @@ That's considerably more interesting than:
 > "Here's my TCP server written in C."
 
 Don't make **"microcontroller visualizer"** the first goal.
-
 Make:
 
 > **"A visual AVR emulator that can run tiny programs."**
@@ -143,13 +142,10 @@ loop:
 ```
 
 And your visualizer shows an LED attached to PB5 blinking.
-
 At that point you've crossed an important boundary:
 
 **you're no longer displaying fake MCU behavior.**
-
 You're actually executing a program against your model of the hardware.
-
 That's where this becomes genuinely interesting.
 
 ---
@@ -206,15 +202,13 @@ ON
 Now the datasheet isn't just documentation you're reading.
 
 **The datasheet becomes the specification for the software you're building.**
-
-That's exactly the kind of project that forces you to understand things rather than memorize APIs.
+That's exactly the kind of project that forces understanding rather than memorizing APIs.
 
 ---
 
 # There's another direction I'd strongly recommend
 
 Make the visualizer capable of showing **multiple levels of abstraction**.
-
 For example:
 
 ### Level 1 — Hardware
@@ -273,9 +267,7 @@ That would be an excellent educational tool.
 
 > **"I'm building an AVR emulator, initially implementing a small subset of the ATmega328P."**
 
-Much more manageable.
-
-can progressively add peripherals.
+Much more manageable and can progressively add peripherals.
 
 ```text
 v0.1
@@ -357,7 +349,7 @@ make the architecture something like:
 
 The **emulator should work completely without the GUI**.
 
-Then you can test it:
+Then it can be tested:
 
 ```text
 test_add()
@@ -369,7 +361,7 @@ test_timer()
 
 And the visualizer simply observes what the emulator is doing.
 
-That separation will also teach you some very useful software architecture.
+That separation will also teach some very useful software architecture.
 
 ---
 
@@ -395,4 +387,4 @@ You will eventually need:
 
 And unlike doing random C exercises, **every C concept has a reason to exist.**
 
-keep the first milestone extremely small — **"execute 10 AVR instructions and visualize GPIO"** — I think this is substantially better than the usual beginner systems projects for what you're trying to accomplish.
+keep the first milestone extremely small — **"execute 10 AVR instructions and visualize GPIO"**
