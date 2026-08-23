@@ -27,7 +27,7 @@ build: $(TARGET)
 test: $(TEST_TARGET)
 	$(TEST_TARGET)
 
-$(TEST_TARGET): tests/test_runner.c tests/test_phase1.c tests/test_phase2.c tests/test_phase3.c tests/test_phase4.c \
+$(TEST_TARGET): tests/test_runner.c tests/test_phase1.c tests/test_phase2.c tests/test_phase3.c tests/test_phase4.c tests/test_phase5.c \
 				src/mcu/avr_mcu.c \
 				src/instructions/avr_instruction.c
 	@mkdir -p $(dir $@)
@@ -62,7 +62,7 @@ help:
 	@printf '%s\n' \
 	  'make compile  Compile source files into build objects.' \
 	  'make build    Build $(TARGET).' \
-	  'make test     Run the Phase 1 through Phase 4 test suite.' \
+	  'make test     Run the Phase 1 through Phase 5 test suite.' \
 	  'make run      Build and run the emulator.' \
 	  'make debug    Build and open the emulator in $(DEBUGGER).' \
 	  'make clean    Remove generated build files.'

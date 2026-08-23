@@ -4,6 +4,7 @@
 #include "test_phase2.h"
 #include "test_phase3.h"
 #include "test_phase4.h"
+#include "test_phase5.h"
 
 int main(void)
 {
@@ -32,6 +33,12 @@ int main(void)
   test_in_out_instruction_decoding_and_roundtrip();
   test_in_out_direct_execution();
   test_phase4_machine_code_integration();
+  test_phase5_instruction_encoding();
+  test_phase5_instruction_decoding_and_roundtrip();
+  test_dec_flags_and_preservation();
+  test_relative_control_flow_execution();
+  test_phase5_machine_code_loop();
+  test_phase5_failure_semantics();
   printf("All tests passed!\n");
   return 0;
 }

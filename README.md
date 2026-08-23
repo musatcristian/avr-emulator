@@ -103,6 +103,21 @@ The I/O IDs are compact emulator identifiers, not real ATmega328P addresses.
 Phase 4 does not implement a complete AVR data-space map, PIN toggle writes,
 timers, interrupts, or a visualizer.
 
+## Phase 5 Summary
+
+Phase 5 adds control flow and looping while keeping execution deterministic and
+headless.
+
+- `RJMP` with signed 12-bit word-relative offsets from -2048 to 2047.
+- `BRNE` and `BREQ` with signed 7-bit word-relative offsets from -64 to 63.
+- Taken branches use `PC + 1 + offset`; untaken branches use `PC + 1`.
+- `DEC` with AVR-style `Z`, `N`, `V`, and `S` flag behavior while preserving
+  `I`, `T`, `H`, and `C`.
+- Control-flow failures leave the program counter and machine state unchanged.
+
+All Phase 5 instructions remain 16-bit words. The conditional branch subset is
+encoded using the AVR `BRBC`/`BRBS` Z-bit forms (`BRNE`/`BREQ` aliases).
+
 ## Build and Test
 
 - Build emulator: `make build`

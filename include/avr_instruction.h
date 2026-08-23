@@ -16,7 +16,11 @@ typedef enum
   AVR_OPERATION_LD,
   AVR_OPERATION_ST,
   AVR_OPERATION_IN,
-  AVR_OPERATION_OUT
+  AVR_OPERATION_OUT,
+  AVR_OPERATION_RJMP,
+  AVR_OPERATION_BRNE,
+  AVR_OPERATION_BREQ,
+  AVR_OPERATION_DEC
 } AvrOperation;
 
 typedef struct
@@ -25,6 +29,7 @@ typedef struct
   uint8_t destination_register;
   uint8_t source_register;
   uint8_t immediate;
+  int16_t relative_offset;
 } AvrInstruction;
 
 bool avr_encode_instruction(const AvrInstruction *instruction,

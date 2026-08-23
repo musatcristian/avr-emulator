@@ -21,11 +21,24 @@ enum
   AVR_IN_MASK = 0xf800,
   AVR_IN_OPCODE = 0xb000,
   AVR_OUT_MASK = 0xf800,
-  AVR_OUT_OPCODE = 0xb800
+  AVR_OUT_OPCODE = 0xb800,
+  AVR_RJMP_MASK = 0xf000,
+  AVR_RJMP_OPCODE = 0xc000,
+  AVR_BRNE_MASK = 0xfc07,
+  AVR_BRNE_OPCODE = 0xf401,
+  AVR_BREQ_MASK = 0xfc07,
+  AVR_BREQ_OPCODE = 0xf001,
+  AVR_DEC_MASK = 0xfe0f,
+  AVR_DEC_OPCODE = 0x940a
 };
 
 static bool valid_register(uint8_t register_index);
 static bool read_x_pointer(const AvrMCU *mcu, uint16_t *address);
+static bool valid_relative_offset(int16_t offset, int16_t minimum,
+                                  int16_t maximum);
+static uint16_t encode_relative_offset(int16_t offset, uint8_t bit_count);
+static int16_t decode_relative_offset(uint16_t instruction_word,
+                                      uint8_t bit_count);
 
 static uint16_t encode_dual_register(uint16_t opcode, uint8_t destination,
                                      uint8_t source)
@@ -188,6 +201,43 @@ bool avr_encode_instruction(const AvrInstruction *instruction,
     return true;
   }
 
+  if (instruction->operation == AVR_OPERATION_RJMP)
+  {
+    if (!valid_relative_offset(instruction->relative_offset, -2048, 2047))
+    {
+      return false;
+    }
+
+    *instruction_word = (uint16_t)(AVR_RJMP_OPCODE |
+                                   encode_relative_offset(instruction->relative_offset,
+                                                          12));
+    return true;
+  }
+
+  if (instruction->operation == AVR_OPERATION_BRNE ||
+      instruction->operation == AVR_OPERATION_BREQ)
+  {
+    if (!valid_relative_offset(instruction->relative_offset, -64, 63))
+    {
+      return false;
+    }
+
+    *instruction_word = (uint16_t)((instruction->operation == AVR_OPERATION_BRNE
+                                        ? AVR_BRNE_OPCODE
+                                        : AVR_BREQ_OPCODE) |
+                  (encode_relative_offset(instruction->relative_offset,
+                            7)
+                   << 3));
+    return true;
+  }
+
+  if (instruction->operation == AVR_OPERATION_DEC)
+  {
+    *instruction_word = (uint16_t)(AVR_DEC_OPCODE |
+                                   ((uint16_t)instruction->destination_register << 4));
+    return true;
+  }
+
   return false;
 }
 
@@ -287,6 +337,41 @@ bool avr_decode_instruction_word(uint16_t instruction_word,
     instruction->source_register =
         (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
     instruction->immediate = decode_io_address(instruction_word);
+    return true;
+  }
+
+  if ((instruction_word & AVR_RJMP_MASK) == AVR_RJMP_OPCODE)
+  {
+    instruction->operation = AVR_OPERATION_RJMP;
+    instruction->destination_register = 0;
+    instruction->source_register = 0;
+    instruction->immediate = 0;
+    instruction->relative_offset = decode_relative_offset(instruction_word, 12);
+    return true;
+  }
+
+  if ((instruction_word & AVR_BRNE_MASK) == AVR_BRNE_OPCODE ||
+      (instruction_word & AVR_BREQ_MASK) == AVR_BREQ_OPCODE)
+  {
+    instruction->operation = (instruction_word & AVR_BRNE_MASK) == AVR_BRNE_OPCODE
+                                 ? AVR_OPERATION_BRNE
+                                 : AVR_OPERATION_BREQ;
+    instruction->destination_register = 0;
+    instruction->source_register = 0;
+    instruction->immediate = 0;
+    instruction->relative_offset = decode_relative_offset((uint16_t)(instruction_word >> 3),
+                                7);
+    return true;
+  }
+
+  if ((instruction_word & AVR_DEC_MASK) == AVR_DEC_OPCODE)
+  {
+    instruction->operation = AVR_OPERATION_DEC;
+    instruction->destination_register =
+        (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
+    instruction->source_register = 0;
+    instruction->immediate = 0;
+    instruction->relative_offset = 0;
     return true;
   }
 
@@ -390,9 +475,58 @@ static uint8_t arithmetic_flags_inc(uint8_t result)
   return flags;
 }
 
+static uint8_t arithmetic_flags_dec(uint8_t result)
+{
+  uint8_t flags = 0;
+
+  if (result == UINT8_C(0x7f))
+  {
+    flags |= AVR_SREG_V;
+  }
+  if ((result & UINT8_C(0x80)) != 0)
+  {
+    flags |= AVR_SREG_N;
+  }
+  if (result == 0)
+  {
+    flags |= AVR_SREG_Z;
+  }
+  if (((flags & AVR_SREG_N) != 0) != ((flags & AVR_SREG_V) != 0))
+  {
+    flags |= AVR_SREG_S;
+  }
+
+  return flags;
+}
+
 static bool valid_register(uint8_t register_index)
 {
   return register_index < AVR_REGISTER_COUNT;
+}
+
+static bool valid_relative_offset(int16_t offset, int16_t minimum,
+                                  int16_t maximum)
+{
+  return offset >= minimum && offset <= maximum;
+}
+
+static uint16_t encode_relative_offset(int16_t offset, uint8_t bit_count)
+{
+  return (uint16_t)offset & (uint16_t)((UINT16_C(1) << bit_count) - 1);
+}
+
+static int16_t decode_relative_offset(uint16_t instruction_word,
+                                      uint8_t bit_count)
+{
+  uint16_t encoded = instruction_word & (uint16_t)((UINT16_C(1) << bit_count) - 1);
+  uint16_t sign_bit = UINT16_C(1) << (bit_count - 1);
+
+  if ((encoded & sign_bit) != 0)
+  {
+    encoded |= (uint16_t)~((UINT16_C(1) << bit_count) - 1);
+  }
+
+  return (int16_t)encoded;
 }
 
 static bool read_x_pointer(const AvrMCU *mcu, uint16_t *address)
@@ -418,12 +552,15 @@ bool avr_execute_instruction(AvrMCU *cpu, const AvrInstruction *instruction)
   uint8_t result;
   uint8_t flags;
   uint16_t x_address;
+  uint16_t next_pc;
 
   if (cpu == NULL || instruction == NULL ||
       !valid_register(instruction->destination_register))
   {
     return false;
   }
+
+  next_pc = (uint16_t)(avr_mcu_read_pc(cpu) + 1);
 
   if (instruction->operation == AVR_OPERATION_LDI)
   {
@@ -535,11 +672,53 @@ bool avr_execute_instruction(AvrMCU *cpu, const AvrInstruction *instruction)
       return false;
     }
   }
+  else if (instruction->operation == AVR_OPERATION_RJMP)
+  {
+    if (!valid_relative_offset(instruction->relative_offset, -2048, 2047))
+    {
+      return false;
+    }
+
+    next_pc = (uint16_t)(avr_mcu_read_pc(cpu) + 1 + instruction->relative_offset);
+  }
+  else if (instruction->operation == AVR_OPERATION_BRNE ||
+           instruction->operation == AVR_OPERATION_BREQ)
+  {
+    if (!valid_relative_offset(instruction->relative_offset, -64, 63))
+    {
+      return false;
+    }
+
+    if ((instruction->operation == AVR_OPERATION_BRNE &&
+         (avr_mcu_read_sreg(cpu) & AVR_SREG_Z) == 0) ||
+        (instruction->operation == AVR_OPERATION_BREQ &&
+         (avr_mcu_read_sreg(cpu) & AVR_SREG_Z) != 0))
+    {
+      next_pc = (uint16_t)(avr_mcu_read_pc(cpu) + 1 +
+                           instruction->relative_offset);
+    }
+  }
+  else if (instruction->operation == AVR_OPERATION_DEC)
+  {
+    if (!avr_mcu_read_register(cpu, instruction->destination_register,
+                               &destination))
+    {
+      return false;
+    }
+
+    result = (uint8_t)(destination - 1);
+    flags = arithmetic_flags_dec(result);
+    avr_mcu_write_register(cpu, instruction->destination_register, result);
+    avr_mcu_write_sreg(cpu, (uint8_t)((avr_mcu_read_sreg(cpu) &
+                                       (AVR_SREG_I | AVR_SREG_T | AVR_SREG_H |
+                                        AVR_SREG_C)) |
+                                      flags));
+  }
   else
   {
     return false;
   }
 
-  avr_mcu_write_pc(cpu, (uint16_t)(avr_mcu_read_pc(cpu) + 1));
+  avr_mcu_write_pc(cpu, next_pc);
   return true;
 }
