@@ -36,6 +36,9 @@ typedef struct
   uint8_t ddrb;
   uint8_t portb;
   uint8_t external_input;
+  /* Stack pointer: address of the next free SRAM byte below the stack top;
+   * reset points one past the last valid SRAM address (empty stack). */
+  uint16_t sp;
 } AvrMCU;
 
 AvrMCU avr_mcu_create(void);
@@ -51,6 +54,9 @@ void avr_mcu_write_pc(AvrMCU *cpu, uint16_t value);
 
 uint8_t avr_mcu_read_sreg(const AvrMCU *cpu);
 void avr_mcu_write_sreg(AvrMCU *cpu, uint8_t value);
+
+uint16_t avr_mcu_read_sp(const AvrMCU *cpu);
+void avr_mcu_write_sp(AvrMCU *cpu, uint16_t value);
 
 bool avr_mcu_read_flash(const AvrMCU *cpu, uint16_t address,
                         uint16_t *instruction);

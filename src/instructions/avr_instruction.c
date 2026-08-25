@@ -43,7 +43,17 @@ enum
   AVR_SBI_MASK = 0xff00,
   AVR_SBI_OPCODE = 0x9a00,
   AVR_CBI_MASK = 0xff00,
-  AVR_CBI_OPCODE = 0x9800
+  AVR_CBI_OPCODE = 0x9800,
+  AVR_PUSH_MASK = 0xfe0f,
+  AVR_PUSH_OPCODE = 0x920f,
+  AVR_POP_MASK = 0xfe0f,
+  AVR_POP_OPCODE = 0x900f,
+  /* Simplified single-word CALL: AVR_FLASH_SIZE fits in 10 bits, unlike real
+   * AVR's 22-bit address space, so no second instruction word is needed. */
+  AVR_CALL_MASK = 0xfc00,
+  AVR_CALL_OPCODE = 0x9c00,
+  AVR_RET_MASK = 0xffff,
+  AVR_RET_OPCODE = 0x9508
 };
 
 static bool valid_register(uint8_t register_index);
@@ -325,6 +335,45 @@ bool avr_encode_instruction(const AvrInstruction *instruction,
     return true;
   }
 
+  if (instruction->operation == AVR_OPERATION_PUSH)
+  {
+    if (!valid_register(instruction->source_register))
+    {
+      return false;
+    }
+
+    *instruction_word = (uint16_t)(AVR_PUSH_OPCODE |
+                                   ((uint16_t)instruction->source_register << 4));
+    return true;
+  }
+
+  if (instruction->operation == AVR_OPERATION_POP)
+  {
+    *instruction_word = (uint16_t)(AVR_POP_OPCODE |
+                                   ((uint16_t)instruction->destination_register
+                                    << 4));
+    return true;
+  }
+
+  if (instruction->operation == AVR_OPERATION_CALL)
+  {
+    if (instruction->target_address >= AVR_FLASH_SIZE)
+    {
+      return false;
+    }
+
+    *instruction_word = (uint16_t)(AVR_CALL_OPCODE |
+                                   (instruction->target_address &
+                                    UINT16_C(0x03ff)));
+    return true;
+  }
+
+  if (instruction->operation == AVR_OPERATION_RET)
+  {
+    *instruction_word = AVR_RET_OPCODE;
+    return true;
+  }
+
   return false;
 }
 
@@ -514,6 +563,52 @@ bool avr_decode_instruction_word(uint16_t instruction_word,
     instruction->immediate = decode_bit_io_address(instruction_word);
     instruction->bit_index = decode_bit_index(instruction_word);
     instruction->relative_offset = 0;
+    return true;
+  }
+
+  if ((instruction_word & AVR_PUSH_MASK) == AVR_PUSH_OPCODE)
+  {
+    instruction->operation = AVR_OPERATION_PUSH;
+    instruction->destination_register = 0;
+    instruction->source_register =
+        (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
+    instruction->immediate = 0;
+    instruction->relative_offset = 0;
+    instruction->target_address = 0;
+    return true;
+  }
+
+  if ((instruction_word & AVR_POP_MASK) == AVR_POP_OPCODE)
+  {
+    instruction->operation = AVR_OPERATION_POP;
+    instruction->destination_register =
+        (uint8_t)((instruction_word >> 4) & UINT16_C(0x001f));
+    instruction->source_register = 0;
+    instruction->immediate = 0;
+    instruction->relative_offset = 0;
+    instruction->target_address = 0;
+    return true;
+  }
+
+  if ((instruction_word & AVR_CALL_MASK) == AVR_CALL_OPCODE)
+  {
+    instruction->operation = AVR_OPERATION_CALL;
+    instruction->destination_register = 0;
+    instruction->source_register = 0;
+    instruction->immediate = 0;
+    instruction->relative_offset = 0;
+    instruction->target_address = instruction_word & UINT16_C(0x03ff);
+    return true;
+  }
+
+  if ((instruction_word & AVR_RET_MASK) == AVR_RET_OPCODE)
+  {
+    instruction->operation = AVR_OPERATION_RET;
+    instruction->destination_register = 0;
+    instruction->source_register = 0;
+    instruction->immediate = 0;
+    instruction->relative_offset = 0;
+    instruction->target_address = 0;
     return true;
   }
 
@@ -711,6 +806,10 @@ bool avr_execute_instruction(AvrMCU *cpu, const AvrInstruction *instruction)
   uint8_t flags;
   uint16_t x_address;
   uint16_t next_pc;
+  uint16_t sp;
+  uint16_t return_address;
+  uint8_t stack_low;
+  uint8_t stack_high;
 
   if (cpu == NULL || instruction == NULL ||
       !valid_register(instruction->destination_register))
@@ -961,6 +1060,72 @@ bool avr_execute_instruction(AvrMCU *cpu, const AvrInstruction *instruction)
     {
       return false;
     }
+  }
+  else if (instruction->operation == AVR_OPERATION_PUSH)
+  {
+    sp = avr_mcu_read_sp(cpu);
+
+    if (!valid_register(instruction->source_register) ||
+        !avr_mcu_read_register(cpu, instruction->source_register, &source) ||
+        sp == 0)
+    {
+      return false;
+    }
+
+    sp = (uint16_t)(sp - 1);
+    if (!avr_mcu_write_data(cpu, sp, source))
+    {
+      return false;
+    }
+
+    avr_mcu_write_sp(cpu, sp);
+  }
+  else if (instruction->operation == AVR_OPERATION_POP)
+  {
+    sp = avr_mcu_read_sp(cpu);
+
+    if (sp >= AVR_SRAM_SIZE || !avr_mcu_read_data(cpu, sp, &source))
+    {
+      return false;
+    }
+
+    avr_mcu_write_register(cpu, instruction->destination_register, source);
+    avr_mcu_write_sp(cpu, (uint16_t)(sp + 1));
+  }
+  else if (instruction->operation == AVR_OPERATION_CALL)
+  {
+    sp = avr_mcu_read_sp(cpu);
+    return_address = (uint16_t)(avr_mcu_read_pc(cpu) + 1);
+
+    if (instruction->target_address >= AVR_FLASH_SIZE || sp < 2)
+    {
+      return false;
+    }
+
+    stack_high = (uint8_t)(return_address >> 8);
+    stack_low = (uint8_t)(return_address & UINT8_C(0xff));
+    if (!avr_mcu_write_data(cpu, (uint16_t)(sp - 1), stack_high) ||
+        !avr_mcu_write_data(cpu, (uint16_t)(sp - 2), stack_low))
+    {
+      return false;
+    }
+
+    avr_mcu_write_sp(cpu, (uint16_t)(sp - 2));
+    next_pc = instruction->target_address;
+  }
+  else if (instruction->operation == AVR_OPERATION_RET)
+  {
+    sp = avr_mcu_read_sp(cpu);
+
+    if (sp > (uint16_t)(AVR_SRAM_SIZE - 2) ||
+        !avr_mcu_read_data(cpu, sp, &stack_low) ||
+        !avr_mcu_read_data(cpu, (uint16_t)(sp + 1), &stack_high))
+    {
+      return false;
+    }
+
+    avr_mcu_write_sp(cpu, (uint16_t)(sp + 2));
+    next_pc = (uint16_t)(((uint16_t)stack_high << 8) | stack_low);
   }
   else
   {

@@ -4,7 +4,10 @@
 
 AvrMCU avr_mcu_create(void)
 {
-  return (AvrMCU){0};
+  AvrMCU mcu = {0};
+
+  mcu.sp = AVR_SRAM_SIZE;
+  return mcu;
 }
 
 void avr_mcu_reset(AvrMCU *mcu)
@@ -54,6 +57,16 @@ uint8_t avr_mcu_read_sreg(const AvrMCU *mcu)
 void avr_mcu_write_sreg(AvrMCU *mcu, uint8_t value)
 {
   mcu->sreg = value;
+}
+
+uint16_t avr_mcu_read_sp(const AvrMCU *mcu)
+{
+  return mcu->sp;
+}
+
+void avr_mcu_write_sp(AvrMCU *mcu, uint16_t value)
+{
+  mcu->sp = value;
 }
 
 bool avr_mcu_read_flash(const AvrMCU *mcu, uint16_t address,

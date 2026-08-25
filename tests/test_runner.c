@@ -6,6 +6,7 @@
 #include "test_phase4.h"
 #include "test_phase5.h"
 #include "test_phase6.h"
+#include "test_phase7.h"
 
 int main(void)
 {
@@ -47,6 +48,12 @@ int main(void)
   test_sbi_cbi_gpio_execution();
   test_phase6_machine_code_integration();
   test_phase6_failure_semantics();
+  test_phase7_instruction_encoding();
+  test_phase7_instruction_decoding_and_roundtrip();
+  test_push_pop_execution_and_stack_bounds();
+  test_call_ret_execution_and_stack_bounds();
+  test_phase7_machine_code_nested_subroutines();
+  test_phase7_failure_semantics();
   printf("All tests passed!\n");
   return 0;
 }

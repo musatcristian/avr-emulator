@@ -134,6 +134,26 @@ input-driven programs.
 `SBI` and `CBI` use the existing symbolic I/O API, so unsupported or read-only
 registers fail without changing the MCU.
 
+## Phase 7 Summary
+
+Phase 7 adds a stack and subroutine calls on top of the existing SRAM model.
+
+- A dedicated stack pointer (`sp`) tracks the address of the next free SRAM
+  byte below the stack top; it resets to `AVR_SRAM_SIZE` (empty stack).
+- `PUSH` pre-decrements `sp` then writes; `POP` reads then post-increments
+  `sp`. Overflow (`sp == 0`) and underflow (`sp == AVR_SRAM_SIZE`) are
+  detected before any mutation, so failures leave the MCU unchanged.
+- `CALL` is a simplified single-word instruction with a 10-bit embedded
+  absolute target (`AVR_FLASH_SIZE` fits in 10 bits), which keeps the
+  existing one-word fetch/decode pipeline unchanged. This is a deliberate
+  deviation from real AVR's two-word `CALL` encoding.
+- `PUSH`, `POP`, and `RET` use the real AVR opcodes. The return address
+  pushed by `CALL` is `pc + 1`, stored high byte first, and `RET` reconstructs
+  it and advances `sp` back past both bytes.
+- Nested `CALL`/`RET` sequences are covered by an encoded machine-code
+  regression test, verifying `sp` returns to its initial value after matching
+  returns.
+
 ## Build and Test
 
 - Build emulator: `make build`

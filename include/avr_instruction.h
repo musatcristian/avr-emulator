@@ -27,7 +27,11 @@ typedef enum
   AVR_OPERATION_CP,
   AVR_OPERATION_CPI,
   AVR_OPERATION_SBI,
-  AVR_OPERATION_CBI
+  AVR_OPERATION_CBI,
+  AVR_OPERATION_PUSH,
+  AVR_OPERATION_POP,
+  AVR_OPERATION_CALL,
+  AVR_OPERATION_RET
 } AvrOperation;
 
 typedef struct
@@ -38,6 +42,8 @@ typedef struct
   uint8_t immediate;
   uint8_t bit_index;
   int16_t relative_offset;
+  /* Absolute flash word address for CALL; fits AVR_FLASH_SIZE in one word. */
+  uint16_t target_address;
 } AvrInstruction;
 
 bool avr_encode_instruction(const AvrInstruction *instruction,
