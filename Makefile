@@ -14,6 +14,8 @@ LDLIBS :=
 
 SOURCES := $(shell find $(SRC_DIR) -type f -name '*.c')
 OBJECTS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SOURCES))
+TEST_SOURCES := $(shell find tests -type f -name '*.c') \
+               $(filter-out $(SRC_DIR)/main/%.c,$(SOURCES))
 
 .PHONY: all compile build test run debug clean help
 
@@ -27,9 +29,7 @@ build: $(TARGET)
 test: $(TEST_TARGET)
 	$(TEST_TARGET)
 
-$(TEST_TARGET): tests/test_runner.c tests/test_phase1.c tests/test_phase2.c tests/test_phase3.c tests/test_phase4.c tests/test_phase5.c tests/test_phase6.c tests/test_phase7.c \
-				src/mcu/avr_mcu.c \
-				src/instructions/avr_instruction.c
+$(TEST_TARGET): $(TEST_SOURCES)
 	@mkdir -p $(dir $@)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -o $@
 
@@ -62,7 +62,7 @@ help:
 	@printf '%s\n' \
 	  'make compile  Compile source files into build objects.' \
 	  'make build    Build $(TARGET).' \
-	  'make test     Run the Phase 1 through Phase 7 test suite.' \
+	  'make test     Run the Phase 1 through Phase 8 test suite.' \
 	  'make run      Build and run the emulator.' \
 	  'make debug    Build and open the emulator in $(DEBUGGER).' \
 	  'make clean    Remove generated build files.'

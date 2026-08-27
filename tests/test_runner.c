@@ -7,6 +7,7 @@
 #include "test_phase5.h"
 #include "test_phase6.h"
 #include "test_phase7.h"
+#include "test_phase8.h"
 
 int main(void)
 {
@@ -54,6 +55,9 @@ int main(void)
   test_call_ret_execution_and_stack_bounds();
   test_phase7_machine_code_nested_subroutines();
   test_phase7_failure_semantics();
+  test_intel_hex_loader_matches_direct_program();
+  test_intel_hex_loader_preserves_unwritten_flash();
+  test_intel_hex_loader_failure_semantics();
   printf("All tests passed!\n");
   return 0;
 }

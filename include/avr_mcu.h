@@ -70,6 +70,9 @@ bool avr_mcu_read_external_input(const AvrMCU *mcu, uint8_t *value);
 bool avr_mcu_write_external_input(AvrMCU *mcu, uint8_t value);
 bool avr_mcu_load_program(AvrMCU *mcu, const uint16_t *program,
                           size_t instruction_count);
+/* Parses an Intel HEX (record type 00/01 only) image into Flash; rejects the
+ * whole image, leaving Flash untouched, if any record is malformed. */
+bool avr_mcu_load_intel_hex(AvrMCU *mcu, const char *hex_text);
 bool avr_mcu_step(AvrMCU *mcu);
 
 #endif

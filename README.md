@@ -154,6 +154,31 @@ Phase 7 adds a stack and subroutine calls on top of the existing SRAM model.
   regression test, verifying `sp` returns to its initial value after matching
   returns.
 
+## Phase 8 Summary
+
+Phase 8 adds a practical program-loading path without changing the data-space
+model.
+
+- The addressing model is unchanged: registers, the symbolic I/O IDs, and
+  SRAM remain separate namespaces, and there is still only an X pointer (no
+  Y/Z or post-increment/pre-decrement). The unified AVR data-space map and
+  extra pointer forms are deferred until a concrete example program needs
+  them.
+- `avr_mcu_load_intel_hex` loads a subset of the Intel HEX format (data
+  records `00` and the end-of-file record `01`) directly into Flash.
+  Extended segment/linear address records are rejected as unsupported,
+  since Flash is small enough that every byte address fits in 16 bits.
+- Every record's structure and checksum is validated against a staged copy
+  of Flash before anything is written, so a malformed image (bad checksum,
+  unsupported record type, truncated data, records after `EOF`, a missing
+  `EOF` record, or an out-of-range address) leaves the MCU's real Flash
+  completely unchanged.
+- The loader only overwrites the bytes named by its data records, so it can
+  be combined with `avr_mcu_load_program` or applied incrementally without
+  clearing the rest of Flash.
+- Loader output is tested for byte-for-byte equivalence with the existing
+  C-array `avr_mcu_load_program` path.
+
 ## Build and Test
 
 - Build emulator: `make build`
