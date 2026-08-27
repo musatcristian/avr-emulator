@@ -179,6 +179,29 @@ model.
 - Loader output is tested for byte-for-byte equivalence with the existing
   C-array `avr_mcu_load_program` path.
 
+## Phase 9 Summary
+
+Phase 9 adds a deterministic timing and execution-control layer on top of
+`avr_mcu_step`, without introducing any wall-clock dependency.
+
+- `cycle_count` is an abstract counter incremented by exactly one per
+  successfully executed instruction (via `avr_mcu_step`); it does not
+  advance on a failed fetch/decode/execute, matching the existing
+  atomicity guarantee. Every supported instruction currently costs one
+  abstract cycle; per-instruction latency tables are deferred.
+- `avr_mcu_set_breakpoint`/`avr_mcu_clear_breakpoint`/`avr_mcu_has_breakpoint`
+  manage a per-address breakpoint flag over Flash, rejecting out-of-range
+  addresses the same way the Flash read/write API does.
+- `avr_mcu_run(mcu, max_cycles)` repeatedly calls `avr_mcu_step` and returns
+  an `AvrRunResult` reporting why it stopped: `AVR_RUN_STOP_CYCLE_LIMIT`,
+  `AVR_RUN_STOP_BREAKPOINT`, or `AVR_RUN_STOP_INVALID_INSTRUCTION`, along
+  with how many cycles actually ran. A breakpoint at the pc the run started
+  from does not immediately re-trigger, so callers can resume past it.
+- The emulator core performs no `sleep`/`time` calls; abstract cycles are
+  the only notion of time, so `avr_mcu_run(mcu, N)` is required to leave the
+  MCU in exactly the same state as calling `avr_mcu_step` N times in a row
+  when no breakpoint or invalid instruction is encountered.
+
 ## Build and Test
 
 - Build emulator: `make build`

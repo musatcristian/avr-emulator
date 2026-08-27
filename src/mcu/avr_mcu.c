@@ -382,5 +382,81 @@ bool avr_mcu_step(AvrMCU *mcu)
     return false;
   }
 
-  return avr_execute_instruction(mcu, &instruction);
+  if (!avr_execute_instruction(mcu, &instruction))
+  {
+    return false;
+  }
+
+  mcu->cycle_count++;
+  return true;
+}
+
+uint32_t avr_mcu_read_cycle_count(const AvrMCU *mcu)
+{
+  return mcu->cycle_count;
+}
+
+bool avr_mcu_set_breakpoint(AvrMCU *mcu, uint16_t address)
+{
+  if (mcu == NULL || address >= AVR_FLASH_SIZE)
+  {
+    return false;
+  }
+
+  mcu->breakpoints[address] = true;
+  return true;
+}
+
+bool avr_mcu_clear_breakpoint(AvrMCU *mcu, uint16_t address)
+{
+  if (mcu == NULL || address >= AVR_FLASH_SIZE)
+  {
+    return false;
+  }
+
+  mcu->breakpoints[address] = false;
+  return true;
+}
+
+bool avr_mcu_has_breakpoint(const AvrMCU *mcu, uint16_t address)
+{
+  if (mcu == NULL || address >= AVR_FLASH_SIZE)
+  {
+    return false;
+  }
+
+  return mcu->breakpoints[address];
+}
+
+AvrRunResult avr_mcu_run(AvrMCU *mcu, uint32_t max_cycles)
+{
+  AvrRunResult result = {AVR_RUN_STOP_INVALID_INSTRUCTION, 0};
+
+  if (mcu == NULL)
+  {
+    return result;
+  }
+
+  for (uint32_t executed = 0; executed < max_cycles; ++executed)
+  {
+    /* A breakpoint at the starting pc does not immediately re-trigger, so a
+     * caller can resume execution from a location it already stopped at. */
+    if (executed > 0 && avr_mcu_has_breakpoint(mcu, avr_mcu_read_pc(mcu)))
+    {
+      result.reason = AVR_RUN_STOP_BREAKPOINT;
+      result.cycles_executed = executed;
+      return result;
+    }
+
+    if (!avr_mcu_step(mcu))
+    {
+      result.reason = AVR_RUN_STOP_INVALID_INSTRUCTION;
+      result.cycles_executed = executed;
+      return result;
+    }
+  }
+
+  result.reason = AVR_RUN_STOP_CYCLE_LIMIT;
+  result.cycles_executed = max_cycles;
+  return result;
 }

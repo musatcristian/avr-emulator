@@ -62,7 +62,7 @@ help:
 	@printf '%s\n' \
 	  'make compile  Compile source files into build objects.' \
 	  'make build    Build $(TARGET).' \
-	  'make test     Run the Phase 1 through Phase 8 test suite.' \
+	  'make test     Run the Phase 1 through Phase 9 test suite.' \
 	  'make run      Build and run the emulator.' \
 	  'make debug    Build and open the emulator in $(DEBUGGER).' \
 	  'make clean    Remove generated build files.'

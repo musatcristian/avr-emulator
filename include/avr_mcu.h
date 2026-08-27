@@ -39,7 +39,24 @@ typedef struct
   /* Stack pointer: address of the next free SRAM byte below the stack top;
    * reset points one past the last valid SRAM address (empty stack). */
   uint16_t sp;
+  /* Abstract cycle counter: incremented by one per successfully executed
+   * instruction; never advanced by wall-clock time. */
+  uint32_t cycle_count;
+  bool breakpoints[AVR_FLASH_SIZE];
 } AvrMCU;
+
+typedef enum
+{
+  AVR_RUN_STOP_CYCLE_LIMIT,
+  AVR_RUN_STOP_BREAKPOINT,
+  AVR_RUN_STOP_INVALID_INSTRUCTION
+} AvrRunStopReason;
+
+typedef struct
+{
+  AvrRunStopReason reason;
+  uint32_t cycles_executed;
+} AvrRunResult;
 
 AvrMCU avr_mcu_create(void);
 void avr_mcu_reset(AvrMCU *cpu);
@@ -74,5 +91,16 @@ bool avr_mcu_load_program(AvrMCU *mcu, const uint16_t *program,
  * whole image, leaving Flash untouched, if any record is malformed. */
 bool avr_mcu_load_intel_hex(AvrMCU *mcu, const char *hex_text);
 bool avr_mcu_step(AvrMCU *mcu);
+
+uint32_t avr_mcu_read_cycle_count(const AvrMCU *mcu);
+
+bool avr_mcu_set_breakpoint(AvrMCU *mcu, uint16_t address);
+bool avr_mcu_clear_breakpoint(AvrMCU *mcu, uint16_t address);
+bool avr_mcu_has_breakpoint(const AvrMCU *mcu, uint16_t address);
+
+/* Executes up to max_cycles instructions, stopping early on a breakpoint
+ * (other than one already at the starting pc) or an invalid instruction.
+ * Equivalent to calling avr_mcu_step that many times when neither occurs. */
+AvrRunResult avr_mcu_run(AvrMCU *mcu, uint32_t max_cycles);
 
 #endif

@@ -8,6 +8,7 @@
 #include "test_phase6.h"
 #include "test_phase7.h"
 #include "test_phase8.h"
+#include "test_phase9.h"
 
 int main(void)
 {
@@ -58,6 +59,12 @@ int main(void)
   test_intel_hex_loader_matches_direct_program();
   test_intel_hex_loader_preserves_unwritten_flash();
   test_intel_hex_loader_failure_semantics();
+  test_cycle_counter_increments_on_success_only();
+  test_breakpoint_api();
+  test_run_stops_on_cycle_limit();
+  test_run_stops_on_breakpoint();
+  test_run_stops_on_invalid_instruction();
+  test_run_equivalent_to_repeated_step();
   printf("All tests passed!\n");
   return 0;
 }
