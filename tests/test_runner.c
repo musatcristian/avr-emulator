@@ -9,6 +9,7 @@
 #include "test_phase7.h"
 #include "test_phase8.h"
 #include "test_phase9.h"
+#include "test_phase10.h"
 
 int main(void)
 {
@@ -65,6 +66,14 @@ int main(void)
   test_run_stops_on_breakpoint();
   test_run_stops_on_invalid_instruction();
   test_run_equivalent_to_repeated_step();
+  test_snapshot_reflects_mcu_state();
+  test_snapshot_is_read_only();
+  test_snapshot_reports_invalid_instruction();
+  test_format_instruction_examples();
+  test_format_instruction_rejects_short_buffer();
+  test_step_with_events_reports_changes();
+  test_step_with_events_failure_semantics();
+  test_step_with_events_matches_plain_step();
   printf("All tests passed!\n");
   return 0;
 }

@@ -202,6 +202,30 @@ Phase 9 adds a deterministic timing and execution-control layer on top of
   MCU in exactly the same state as calling `avr_mcu_step` N times in a row
   when no breakpoint or invalid instruction is encountered.
 
+## Phase 10 Summary
+
+Phase 10 adds a read-only observation boundary so a future frontend never
+needs to reach into `AvrMCU`'s internal fields, in a new `include/avr_debug.h`
+/ `src/debug/avr_debug.c` module.
+
+- `avr_debug_snapshot(mcu, out)` copies `pc`, the fetched instruction word and
+  its decoded form (with an `instruction_valid` flag for unsupported words),
+  all registers, `SREG`, the full SRAM array, `DDRB`/`PORTB`/`PINB`,
+  `external_input`, `sp`, `cycle_count`, and whether a breakpoint sits at
+  `pc` into an `AvrSnapshot`. It only reads existing accessors/fields and
+  never mutates the MCU.
+- `avr_debug_format_instruction` disassembles a decoded `AvrInstruction` into
+  a human-readable line (e.g. `OUT DDRB, R16`, `RJMP -2 (0x0004)`) using
+  register names, symbolic I/O names, and resolved relative-branch targets;
+  it fails without truncating if the buffer is too small.
+- `avr_debug_step_with_events(mcu, events)` runs one `avr_mcu_step` and
+  reports what changed as an `AvrEventLog` (`PC`, `SREG`, register, SRAM,
+  I/O, and GPIO-pin change events) by diffing snapshots taken before and
+  after the step, rather than adding callbacks inside instruction execution.
+  The event log is always cleared first and only repopulated if the step
+  succeeds, and running through this function leaves the MCU in exactly the
+  same state as an equivalent plain `avr_mcu_step` call.
+
 ## Build and Test
 
 - Build emulator: `make build`
