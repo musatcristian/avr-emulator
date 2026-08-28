@@ -47,6 +47,28 @@ before adding machine-code fetch and decode.
 Phase 2 moves execution from manually constructed instructions to encoded
 machine code in simulated Flash.
 
+## Phase 11 Summary
+
+Phase 11 adds an optional `ncurses` TUI without adding a terminal dependency
+to the headless emulator or test suite. The UI is a separate executable that
+reads state exclusively through the Phase 10 debug API and uses the existing
+MCU control APIs for execution, breakpoints, reset, and external input.
+
+- The TUI shows the current `PC`, instruction word and disassembly, stack
+  pointer, cycle count, `SREG`, all 32 registers, a 64-byte SRAM window,
+  `DDRB`/`PORTB`/`PINB`, external input, and eight GPIO pin indicators.
+- Values changed by the most recent action are highlighted. The current
+  instruction is displayed prominently, with an active breakpoint indicated.
+- The bundled demo configures `PB5` as an output and continuously mirrors
+  virtual input `PB0` to it, so toggling input bit 0 visibly drives the output.
+- TUI controls: `s` step, `r` run/pause, `x` reset demo, `b` toggle a
+  breakpoint at the current `PC`, `0` through `7` toggle external input bits,
+  and `q` quit. Breakpoint or invalid-instruction stops automatically pause
+  execution.
+
+The TUI batches calls to the deterministic headless run API; it does not add
+wall-clock timing or UI behavior to the emulator core.
+
 Implemented in Phase 2:
 
 - Simulated Flash memory of 16-bit instruction words
@@ -231,3 +253,4 @@ needs to reach into `AvrMCU`'s internal fields, in a new `include/avr_debug.h`
 - Build emulator: `make build`
 - Run test suite: `make test`
 - Run emulator demo: `make run`
+- Build and run the optional TUI: `make tui` (requires `ncurses`)
