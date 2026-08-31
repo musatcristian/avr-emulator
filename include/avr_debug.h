@@ -67,6 +67,16 @@ bool avr_debug_format_instruction(const AvrInstruction *instruction,
                                   uint16_t pc, char *buffer,
                                   size_t buffer_size);
 
+/* Formats a plain-English sentence describing what the instruction does,
+ * for non-specialist frontends; returns false if it does not fit. */
+bool avr_debug_explain_instruction(const AvrInstruction *instruction,
+                                   uint16_t pc, char *buffer,
+                                   size_t buffer_size);
+
+/* Full display name for a single-bit AVR_SREG_* mask (e.g. "Zero" for
+ * AVR_SREG_Z); returns "Unknown" for anything else. */
+const char *avr_debug_flag_name(uint8_t sreg_mask);
+
 /* Runs one avr_mcu_step and reports what changed by diffing snapshots taken
  * before and after, rather than hooking into instruction execution. Clears
  * events (if non-NULL) unconditionally, then repopulates it only if the

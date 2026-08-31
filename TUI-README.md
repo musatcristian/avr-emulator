@@ -27,22 +27,31 @@ The screen contains these areas:
 
 - **Status line:** indicates whether execution is `RUN` or `PAUSED` and shows
   the most recent action or stop reason.
-- **Current instruction:** shows the word-addressed program counter (`PC`),
-  current 16-bit machine word, decoded instruction, and whether a breakpoint
-  is set at that `PC`.
-- **CPU state:** shows the stack pointer (`SP`), abstract cycle counter, raw
-  `SREG` value, and individual flags in AVR order: `I T H S V N Z C`.
+- **Current instruction:** shows the current line number (decimal, with the
+  hex flash address in parentheses), the decoded instruction, a one-sentence
+  plain-English explanation of what it does, and (de-emphasized) the raw
+  16-bit machine word and breakpoint status.
+- **Processor state:** shows the stack pointer and abstract cycle counter in
+  decimal (hex in parentheses), and all 8 `SREG` flags spelled out by full
+  name with an explicit `ON`/`OFF` state.
 - **Registers:** shows all 32 eight-bit general-purpose registers (`R0` through
-  `R31`).
-- **SRAM:** shows bytes `0x00` through `0x3F`, the first 64-byte inspection
-  window of the emulator's 256-byte SRAM.
-- **GPIO state:** shows `DDRB`, `PORTB`, `PINB`, external `INPUT`, and one
-  indicator for every `PB7` through `PB0` pin.
+  `R31`) in hex.
+- **Memory (SRAM):** shows bytes 0-63 (`0x00`-`0x3F`), the first 64-byte
+  inspection window of the emulator's 256-byte SRAM, in hex.
+- **GPIO:** a single table with one row per pin, `PB7` through `PB0`, showing
+  each pin's Direction (`Input`/`Output`) and Level (`High`/`Low`) in words,
+  plus a de-emphasized raw-register reference line and a legend.
 
-Changed register and SRAM values are reverse-highlighted after an action.
-GPIO bits that are high use the terminal's green color pair when available;
-bits configured as outputs are bold. The current instruction line is always
+Changed register and SRAM values are reverse-highlighted after an action; SRAM
+bytes that are still zero are dimmed so nonzero bytes stand out. GPIO levels
+that are high use the terminal's green color pair when available; pins
+configured as outputs are bold. The current instruction line is always
 reverse-highlighted so the next instruction is easy to locate.
+
+The layout needs at least **100 columns by 40 rows**. If the terminal is
+smaller, the TUI shows a `Terminal too small` message with the current and
+required size instead of drawing a cramped or clipped screen, and resumes
+normal rendering as soon as the terminal is large enough.
 
 ## How It Works
 
@@ -61,9 +70,16 @@ For rendering, the TUI asks `avr_debug_snapshot` for a read-only `AvrSnapshot`.
 That snapshot includes the `PC`, fetched word, decoded instruction, registers,
 SRAM, SREG, stack and cycle state, GPIO registers, computed pin state, external
 input, and the breakpoint marker. `avr_debug_format_instruction` turns the
-decoded instruction into the disassembly displayed on the instruction line.
-The TUI stores the preceding snapshot and compares it with the new one to
-highlight changed register and SRAM values.
+decoded instruction into the disassembly shown on the instruction line, and
+`avr_debug_explain_instruction` turns the same decoded instruction into the
+plain-English sentence shown beneath it. `avr_debug_flag_name` supplies the
+full name for each `SREG` bit in the processor state panel. The TUI stores the
+preceding snapshot and compares it with the new one to highlight changed
+register and SRAM values.
+
+Each frame, the TUI reads the current terminal size with `getmaxyx` and lays
+out every panel relative to that size rather than fixed coordinates. Below the
+100x40 minimum, it draws only the resize message described above.
 
 Single-step execution calls `avr_debug_step_with_events`. That function performs
 one regular MCU step and returns an event log describing the state changes; the
@@ -77,14 +93,17 @@ The GPIO display follows the emulator's symbolic Port B model:
 
 - `DDRB` selects output bits. A set bit makes the matching PB pin an output.
 - `PORTB` is the output latch written by the running program.
-- `INPUT` is the external state supplied by the user with keys `0` through `7`.
+- The external input state is supplied by the user with keys `0` through `7`.
 - `PINB` is the actual observed pin value. Output-configured bits come from
-  `PORTB`; input-configured bits come from `INPUT`.
+  `PORTB`; input-configured bits come from the external input state.
 
-For each pin indicator, `*` means the computed `PINB` bit is high and `.` means
-it is low. The bold style shows that `DDRB` configured that pin as an output.
-Consequently, the demo's PB5 indicator is bold throughout execution, while PB0
-remains an externally controlled input.
+Rather than showing those four registers as four separate rows of raw bits,
+the GPIO table combines them into one row per pin: Direction reads `Output`
+when the matching `DDRB` bit is set, else `Input`; Level reads `High` when the
+computed `PINB` bit is set, else `Low`. A `Raw:` line below the table still
+shows the underlying `DDRB`/`PORTB`/`PINB`/input hex values for reference.
+Consequently, the demo's PB5 row shows `Output` throughout execution, while
+PB0 shows `Input` and its Level tracks the externally toggled state.
 
 Breakpoints are managed using `avr_mcu_set_breakpoint`,
 `avr_mcu_clear_breakpoint`, and `avr_mcu_has_breakpoint`. The core's run API
@@ -103,7 +122,7 @@ make tui
 ```
 
 The terminal switches into the full-screen interface and begins paused at
-`PC 0000`. Use `q` at any time to exit cleanly and restore the terminal.
+line 0. Use `q` at any time to exit cleanly and restore the terminal.
 
 ### 2. Read the Initial State
 
@@ -117,8 +136,8 @@ configure the demo:
 ```
 
 After these run, `R16` holds `0x20`, so `OUT DDRB, R16` configures bit 5,
-PB5, as an output. `R18` holds `0x01`, the mask used to isolate PB0. The `DDRB`
-row displays `20 00100000`; the one at bit 5 means PB5 is the output pin.
+PB5, as an output. `R18` holds `0x01`, the mask used to isolate PB0. The GPIO
+table's `PB5` row now shows Direction `Output`.
 
 Press `s` three times to execute this setup. Watch the instruction line advance,
 the cycle counter increase by one on every successful step, and the changed
@@ -126,40 +145,40 @@ register values appear highlighted.
 
 ### 3. Follow a Low Input Through the Program
 
-By default, external `INPUT` is `00`, so PB0 is low. Continue stepping with `s`:
+By default, the external input is `00`, so PB0 is low. Continue stepping with `s`:
 
 ```text
-0003  IN R17, PINB
-0004  AND R17, R18
-0005  BREQ +2 (0x0008)
+Line 3  IN R17, PINB
+Line 4  AND R17, R18
+Line 5  BREQ +2 (0x0008)
 ```
 
 `IN` reads the current pin state into `R17`; `AND` preserves only PB0. With PB0
-low, `R17` becomes zero and sets the Z flag. The `BREQ` at `PC 0005` is therefore
-taken and lands at `PC 0008`.
+low, `R17` becomes zero and sets the Zero flag. The plain-English sentence on
+the `BREQ` at line 5 explains it is taken because the last result was zero, and
+it jumps to line 8.
 
 Step once more to execute `CBI PORTB, 5`. `PORTB` and `PINB` remain low, and the
-PB5 indicator stays `.`. The following `RJMP` returns to `PC 0003` to sample the
-input again.
+PB5 row's Level stays `Low`. The following `RJMP` returns to line 3 to sample
+the input again.
 
 ### 4. Turn PB5 On With PB0
 
-Press `0` to toggle external input PB0. The `INPUT` row changes from `00` to
-`01`, and the rightmost pin indicator, PB0, becomes `*`. PB0 is not an output,
-so it is not bold.
+Press `0` to toggle external input PB0. The GPIO table's `PB0` row changes
+Level from `Low` to `High`. PB0's Direction stays `Input`, so it is not bold.
 
-Now step through the loop again. At the `AND`, `R17` becomes `01`, so Z is
-clear. The `BREQ` is not taken; execution continues to:
+Now step through the loop again. At the `AND`, `R17` becomes `01`, so the Zero
+flag is `OFF`. The `BREQ` is not taken; execution continues to:
 
 ```text
-0006  SBI PORTB, 5
-0007  RJMP +1 (0x0009)
+Line 6  SBI PORTB, 5
+Line 7  RJMP +1 (0x0009)
 ```
 
-After stepping `SBI`, `PORTB` displays `20` and PB5's indicator becomes a bold,
-green `*` when terminal colors are available. It is bold because PB5 is an
-output and lit because the program set its output latch. Press `0` again and
-walk through the next loop to see the `CBI` path turn PB5 back off.
+After stepping `SBI`, the `PB5` row's Level becomes `High`, shown in green when
+terminal colors are available, and its Direction remains `Output` (bold). It is
+green because the program set its output latch high. Press `0` again and walk
+through the next loop to see the `CBI` path turn PB5's Level back to `Low`.
 
 ### 5. Run Continuously
 
@@ -172,12 +191,12 @@ its next pass through `IN R17, PINB`, then takes the set or clear path for PB5.
 
 ### 6. Stop on a Breakpoint
 
-While paused, use `s` until the current `PC` is `0003`, the `IN R17, PINB`
-instruction. Press `b` to set a breakpoint there. The instruction line includes
-`BREAKPOINT` to confirm it.
+While paused, use `s` until the current line is `3`, the `IN R17, PINB`
+instruction. Press `b` to set a breakpoint there. The de-emphasized line below
+the instruction now reads "Breakpoint is set on this line" to confirm it.
 
 Press `r`. The program runs forward through the loop. When it returns to
-`PC 0003`, execution pauses and the status line reports `Stopped: breakpoint`.
+line 3, execution pauses and the status line reports `Stopped: breakpoint`.
 Pressing `r` again resumes from that instruction, which lets you inspect or step
 through the next loop iteration. Press `b` at the same address to remove the
 breakpoint.
@@ -185,7 +204,7 @@ breakpoint.
 ### 7. Reset and Exit
 
 Press `x` to discard all current CPU state, GPIO input, breakpoints, SRAM, and
-cycle count, then reload the bundled demo. The UI returns to paused `PC 0000`.
+cycle count, then reload the bundled demo. The UI returns to paused line 0.
 
 Press `q` to exit. The TUI calls `endwin`, restoring normal terminal input and
 screen behavior.
@@ -197,7 +216,7 @@ screen behavior.
 | `s`        | Pause and execute one instruction.                            |
 | `r`        | Toggle continuous run and pause.                              |
 | `x`        | Reset the MCU and reload the bundled demo.                    |
-| `b`        | Toggle a breakpoint at the current `PC`.                      |
+| `b`        | Toggle a breakpoint at the current line.                      |
 | `0` to `7` | Toggle the corresponding external input bit, PB0 through PB7. |
 | `q`        | Quit and restore the terminal.                                |
 | ---------- | ------------------------------------------------------------- |

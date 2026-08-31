@@ -71,6 +71,9 @@ int main(void)
   test_snapshot_reports_invalid_instruction();
   test_format_instruction_examples();
   test_format_instruction_rejects_short_buffer();
+  test_explain_instruction_examples();
+  test_explain_instruction_rejects_short_buffer();
+  test_flag_name_examples();
   test_step_with_events_reports_changes();
   test_step_with_events_failure_semantics();
   test_step_with_events_matches_plain_step();

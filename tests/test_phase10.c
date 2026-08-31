@@ -151,6 +151,85 @@ void test_format_instruction_rejects_short_buffer(void)
         0, NULL, 0));
 }
 
+void test_explain_instruction_examples(void)
+{
+    char buffer[96];
+
+    assert(avr_debug_explain_instruction(&(AvrInstruction){
+                                             .operation = AVR_OPERATION_ADD,
+                                             .destination_register = 1,
+                                             .source_register = 2},
+                                         0, buffer, sizeof(buffer)));
+    assert(strcmp(buffer, "Add R2 to R1 and store the result in R1.") == 0);
+
+    assert(avr_debug_explain_instruction(&(AvrInstruction){
+                                             .operation = AVR_OPERATION_LDI,
+                                             .destination_register = 16,
+                                             .immediate = 5},
+                                         0, buffer, sizeof(buffer)));
+    assert(strcmp(buffer, "Load the number 5 into register R16.") == 0);
+
+    assert(avr_debug_explain_instruction(&(AvrInstruction){
+                                             .operation = AVR_OPERATION_OUT,
+                                             .source_register = 16,
+                                             .immediate = AVR_IO_DDRB},
+                                         0, buffer, sizeof(buffer)));
+    assert(strcmp(buffer, "Copy R16 into io-register DDRB.") == 0);
+
+    assert(avr_debug_explain_instruction(&(AvrInstruction){
+                                             .operation = AVR_OPERATION_BREQ,
+                                             .relative_offset = 2},
+                                         5, buffer, sizeof(buffer)));
+    assert(strcmp(buffer, "If the last result was zero, jump to line 8; "
+                          "otherwise continue to the next line.") == 0);
+
+    assert(avr_debug_explain_instruction(&(AvrInstruction){
+                                             .operation = AVR_OPERATION_SBI,
+                                             .immediate = AVR_IO_PORTB,
+                                             .bit_index = 5},
+                                         0, buffer, sizeof(buffer)));
+    assert(strcmp(buffer, "Turn on bit 5 of io-register PORTB (e.g. drive a GPIO "
+                          "pin high or mark it an output).") == 0);
+
+    assert(avr_debug_explain_instruction(&(AvrInstruction){
+                                             .operation = AVR_OPERATION_CALL,
+                                             .target_address = 0x10},
+                                         0, buffer, sizeof(buffer)));
+    assert(strcmp(buffer, "Jump to line 16 and remember where to come back to.") == 0);
+
+    assert(avr_debug_explain_instruction(
+        &(AvrInstruction){.operation = AVR_OPERATION_RET}, 0, buffer,
+        sizeof(buffer)));
+    assert(strcmp(buffer, "Return to the line right after the last CALL.") == 0);
+}
+
+void test_explain_instruction_rejects_short_buffer(void)
+{
+    char buffer[3];
+
+    assert(!avr_debug_explain_instruction(
+        &(AvrInstruction){.operation = AVR_OPERATION_RET}, 0, buffer,
+        sizeof(buffer)));
+    assert(!avr_debug_explain_instruction(
+        &(AvrInstruction){.operation = AVR_OPERATION_LDI,
+                          .destination_register = 16,
+                          .immediate = 5},
+        0, NULL, 0));
+}
+
+void test_flag_name_examples(void)
+{
+    assert(strcmp(avr_debug_flag_name(AVR_SREG_I), "Interrupt Enable") == 0);
+    assert(strcmp(avr_debug_flag_name(AVR_SREG_T), "T-bit") == 0);
+    assert(strcmp(avr_debug_flag_name(AVR_SREG_H), "Half-Carry") == 0);
+    assert(strcmp(avr_debug_flag_name(AVR_SREG_S), "Sign") == 0);
+    assert(strcmp(avr_debug_flag_name(AVR_SREG_V), "Overflow") == 0);
+    assert(strcmp(avr_debug_flag_name(AVR_SREG_N), "Negative") == 0);
+    assert(strcmp(avr_debug_flag_name(AVR_SREG_Z), "Zero") == 0);
+    assert(strcmp(avr_debug_flag_name(AVR_SREG_C), "Carry") == 0);
+    assert(strcmp(avr_debug_flag_name(0), "Unknown") == 0);
+}
+
 void test_step_with_events_reports_changes(void)
 {
     const AvrInstruction program[] = {

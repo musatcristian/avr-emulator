@@ -11,6 +11,9 @@ enum
     TUI_RUN_BATCH_SIZE = 1,
     TUI_CYCLE_DELAY_MS = 500,
     TUI_STATUS_SIZE = 80,
+    /* Minimum size for the single-column, full-width panel layout below. */
+    TUI_MIN_COLS = 100,
+    TUI_MIN_ROWS = 40,
 };
 
 typedef struct
@@ -76,7 +79,7 @@ static void draw_registers(const TuiState *state, int row, int column)
 {
     uint8_t index;
 
-    mvprintw(row, column, "REGISTERS");
+    mvprintw(row, column, "Registers (R0-R31)");
     for (index = 0; index < AVR_REGISTER_COUNT; ++index)
     {
         int register_row = row + 1 + index / 8;
@@ -92,100 +95,162 @@ static void draw_registers(const TuiState *state, int row, int column)
     }
 }
 
-static void draw_bits(int row, int column, const char *label, uint8_t value,
-                      uint8_t outputs)
-{
-    int bit;
-
-    mvprintw(row, column, "%s %02X ", label, value);
-    for (bit = 7; bit >= 0; --bit)
-    {
-        bool high = (value & (UINT8_C(1) << bit)) != 0;
-        bool output = (outputs & (UINT8_C(1) << bit)) != 0;
-        if (high)
-        {
-            attron(COLOR_PAIR(1));
-        }
-        if (output)
-        {
-            attron(A_BOLD);
-        }
-        printw("%c", high ? '1' : '0');
-        attroff(COLOR_PAIR(1) | A_BOLD);
-    }
-}
-
 static void draw_sram(const TuiState *state, int row, int column)
 {
     uint16_t address;
 
-    mvprintw(row, column, "SRAM 00-3F");
+    mvprintw(row, column, "Memory (SRAM), bytes 0-63 (0x00-0x3F)");
     for (address = 0; address < 64; ++address)
     {
         int memory_row = row + 1 + address / 16;
         int memory_column = column + (address % 16) * 3;
-        if (value_changed(state, state->snapshot.sram[address],
-                          state->previous_snapshot.sram[address]))
+        bool changed = value_changed(state, state->snapshot.sram[address],
+                                     state->previous_snapshot.sram[address]);
+
+        if (changed)
         {
             attron(A_REVERSE);
         }
+        else if (state->snapshot.sram[address] == 0)
+        {
+            attron(A_DIM);
+        }
         mvprintw(memory_row, memory_column, "%02X", state->snapshot.sram[address]);
-        attroff(A_REVERSE);
+        attroff(A_REVERSE | A_DIM);
     }
 }
 
-static void draw_ui(const TuiState *state)
+static void draw_current_instruction(const TuiState *state, int row, int column)
 {
     char instruction[64] = "<invalid instruction>";
-    int bit;
-
-    erase();
-    attron(A_BOLD);
-    mvprintw(0, 0, "AVR Emulator TUI");
-    attroff(A_BOLD);
-    mvprintw(0, 28, "[%s] %s", state->running ? "RUN" : "PAUSED", state->status);
+    char explanation[96] = "";
 
     if (state->snapshot.instruction_valid)
     {
         avr_debug_format_instruction(&state->snapshot.instruction,
                                      state->snapshot.pc, instruction,
                                      sizeof(instruction));
-    }
-    attron(A_REVERSE);
-    mvprintw(2, 0, "PC %04X  WORD %04X  %s%s", state->snapshot.pc,
-             state->snapshot.instruction_word, instruction,
-             state->snapshot.breakpoint_at_pc ? "  BREAKPOINT" : "");
-    attroff(A_REVERSE);
-    mvprintw(3, 0, "SP %04X  CYCLES %u  SREG %02X [I T H S V N Z C] ",
-             state->snapshot.sp, state->snapshot.cycle_count, state->snapshot.sreg);
-    for (bit = 7; bit >= 0; --bit)
-    {
-        printw("%c", (state->snapshot.sreg & (UINT8_C(1) << bit)) ? '1' : '0');
+        avr_debug_explain_instruction(&state->snapshot.instruction,
+                                      state->snapshot.pc, explanation,
+                                      sizeof(explanation));
     }
 
-    draw_registers(state, 5, 0);
-    draw_sram(state, 11, 0);
-    draw_bits(17, 0, "DDRB", state->snapshot.ddrb, UINT8_C(0));
-    draw_bits(18, 0, "PORTB", state->snapshot.portb, state->snapshot.ddrb);
-    draw_bits(19, 0, "PINB", state->snapshot.pinb, state->snapshot.ddrb);
-    draw_bits(20, 0, "INPUT", state->snapshot.external_input, UINT8_C(0));
-    mvprintw(22, 0, "PB7 PB6 PB5 PB4 PB3 PB2 PB1 PB0 \n");
+    attron(A_REVERSE);
+    mvprintw(row, column, "Line %u (0x%04x): %s", state->snapshot.pc,
+             state->snapshot.pc, instruction);
+    attroff(A_REVERSE);
+
+    if (explanation[0] != '\0')
+    {
+        mvprintw(row + 1, column, "%s", explanation);
+    }
+
+    attron(A_DIM);
+    mvprintw(row + 2, column, "Machine word: 0x%04x%s",
+             state->snapshot.instruction_word,
+             state->snapshot.breakpoint_at_pc
+                 ? "   Breakpoint is set on this line"
+                 : "");
+    attroff(A_DIM);
+}
+
+static void draw_flag_cell(int row, int column, uint8_t sreg, uint8_t mask)
+{
+    bool on = (sreg & mask) != 0;
+
+    if (on)
+    {
+        attron(A_BOLD | COLOR_PAIR(1));
+    }
+    mvprintw(row, column, "%-16s: %-3s", avr_debug_flag_name(mask), on ? "ON" : "OFF");
+    attroff(A_BOLD | COLOR_PAIR(1));
+}
+
+static void draw_processor_state(const TuiState *state, int row, int column)
+{
+    static const uint8_t top_row_flags[4] = {AVR_SREG_I, AVR_SREG_T, AVR_SREG_H, AVR_SREG_S};
+    static const uint8_t bottom_row_flags[4] = {AVR_SREG_V, AVR_SREG_N, AVR_SREG_Z, AVR_SREG_C};
+    int index;
+
+    mvprintw(row, column, "Stack pointer: %u (0x%04x)      Cycles executed: %u",
+             state->snapshot.sp, state->snapshot.sp, state->snapshot.cycle_count);
+
+    for (index = 0; index < 4; ++index)
+    {
+        draw_flag_cell(row + 1, column + index * 24, state->snapshot.sreg,
+                       top_row_flags[index]);
+        draw_flag_cell(row + 2, column + index * 24, state->snapshot.sreg,
+                       bottom_row_flags[index]);
+    }
+}
+
+static void draw_gpio_table(const TuiState *state, int row, int column)
+{
+    int bit;
+    int table_row = row;
+
+    mvprintw(table_row++, column, "GPIO Port B");
+    mvprintw(table_row++, column, "Pin   Direction  Level");
     for (bit = 7; bit >= 0; --bit)
     {
-        bool high = (state->snapshot.pinb & (UINT8_C(1) << bit)) != 0;
-        bool output = (state->snapshot.ddrb & (UINT8_C(1) << bit)) != 0;
-        if (high)
+        bool is_output = (state->snapshot.ddrb & (UINT8_C(1) << bit)) != 0;
+        bool is_high = (state->snapshot.pinb & (UINT8_C(1) << bit)) != 0;
+
+        mvprintw(table_row, column, "PB%-2d  %-9s  ", bit, is_output ? "Output" : "Input");
+        if (is_high)
         {
             attron(COLOR_PAIR(1));
         }
-        if (output)
+        if (is_output)
         {
             attron(A_BOLD);
         }
-        printw(" %c  ", high ? '^' : 'v');
+        printw("%s", is_high ? "High" : "Low");
         attroff(COLOR_PAIR(1) | A_BOLD);
+        ++table_row;
     }
-    mvprintw(24, 0, "\ns step  r run/pause  x reset  b breakpoint  0-7 toggle input  q quit");
+
+    attron(A_DIM);
+    mvprintw(table_row++, column, "Raw: DDRB=0x%02X PORTB=0x%02X PINB=0x%02X INPUT=0x%02X",
+             state->snapshot.ddrb, state->snapshot.portb, state->snapshot.pinb,
+             state->snapshot.external_input);
+    mvprintw(table_row, column, "Legend: green/bold = pin is HIGH and configured as an output");
+    attroff(A_DIM);
+}
+
+static void draw_ui(const TuiState *state)
+{
+    int term_rows;
+    int term_cols;
+
+    getmaxyx(stdscr, term_rows, term_cols);
+
+    erase();
+
+    if (term_cols < TUI_MIN_COLS || term_rows < TUI_MIN_ROWS)
+    {
+        int message_row = term_rows > 0 ? term_rows / 2 : 0;
+
+        mvprintw(message_row, 0,
+                 "Terminal too small: resize to at least %dx%d (currently %dx%d).",
+                 TUI_MIN_COLS, TUI_MIN_ROWS, term_cols, term_rows);
+        refresh();
+        return;
+    }
+
+    attron(A_BOLD);
+    mvprintw(0, 0, "AVR Emulator TUI");
+    attroff(A_BOLD);
+    mvprintw(0, 28, "[%s] %s", state->running ? "RUN" : "PAUSED", state->status);
+
+    draw_current_instruction(state, 2, 0);
+    draw_processor_state(state, 6, 0);
+    draw_registers(state, 10, 0);
+    draw_sram(state, 16, 0);
+    draw_gpio_table(state, 22, 0);
+
+    mvprintw(35, 0, "s = Step   r = Run/Pause   x = Reset & reload demo   b = Toggle breakpoint");
+    mvprintw(36, 0, "0-7 = Toggle input pin   q = Quit");
     refresh();
 }
 

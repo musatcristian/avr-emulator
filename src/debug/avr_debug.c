@@ -209,6 +209,175 @@ bool avr_debug_format_instruction(const AvrInstruction *instruction,
     return written > 0 && (size_t)written < buffer_size;
 }
 
+bool avr_debug_explain_instruction(const AvrInstruction *instruction,
+                                   uint16_t pc, char *buffer,
+                                   size_t buffer_size)
+{
+    char io_buffer[16];
+    int written;
+
+    if (instruction == NULL || buffer == NULL || buffer_size == 0)
+    {
+        return false;
+    }
+
+    switch (instruction->operation)
+    {
+    case AVR_OPERATION_LDI:
+        written = snprintf(buffer, buffer_size, "Load the number %u into register R%u.",
+                           instruction->immediate, instruction->destination_register);
+        break;
+    case AVR_OPERATION_MOV:
+        written = snprintf(buffer, buffer_size, "Copy the value of R%u into R%u.",
+                           instruction->source_register, instruction->destination_register);
+        break;
+    case AVR_OPERATION_ADD:
+        written = snprintf(buffer, buffer_size, "Add R%u to R%u and store the result in R%u.",
+                           instruction->source_register, instruction->destination_register,
+                           instruction->destination_register);
+        break;
+    case AVR_OPERATION_SUB:
+        written = snprintf(buffer, buffer_size, "Subtract R%u from R%u and store the result in R%u.",
+                           instruction->source_register, instruction->destination_register,
+                           instruction->destination_register);
+        break;
+    case AVR_OPERATION_INC:
+        written = snprintf(buffer, buffer_size, "Add 1 to R%u.",
+                           instruction->destination_register);
+        break;
+    case AVR_OPERATION_DEC:
+        written = snprintf(buffer, buffer_size, "Subtract 1 from R%u.",
+                           instruction->destination_register);
+        break;
+    case AVR_OPERATION_LD:
+        written = snprintf(buffer, buffer_size,
+                           "Load the byte at memory address X (R27:R26) into R%u.",
+                           instruction->destination_register);
+        break;
+    case AVR_OPERATION_ST:
+        written = snprintf(buffer, buffer_size,
+                           "Store R%u into memory at address X (R27:R26).",
+                           instruction->source_register);
+        break;
+    case AVR_OPERATION_IN:
+        written = snprintf(buffer, buffer_size, "Copy the value of io-register %s into R%u.",
+                           io_name(instruction->immediate, io_buffer, sizeof(io_buffer)),
+                           instruction->destination_register);
+        break;
+    case AVR_OPERATION_OUT:
+        written = snprintf(buffer, buffer_size, "Copy R%u into io-register %s.",
+                           instruction->source_register,
+                           io_name(instruction->immediate, io_buffer, sizeof(io_buffer)));
+        break;
+    case AVR_OPERATION_RJMP:
+        written = snprintf(buffer, buffer_size, "Jump to line %u.",
+                           (unsigned)(uint16_t)(pc + 1 + instruction->relative_offset));
+        break;
+    case AVR_OPERATION_BRNE:
+        written = snprintf(buffer, buffer_size,
+                           "If the last result was not zero, jump to line %u; "
+                           "otherwise continue to the next line.",
+                           (unsigned)(uint16_t)(pc + 1 + instruction->relative_offset));
+        break;
+    case AVR_OPERATION_BREQ:
+        written = snprintf(buffer, buffer_size,
+                           "If the last result was zero, jump to line %u; "
+                           "otherwise continue to the next line.",
+                           (unsigned)(uint16_t)(pc + 1 + instruction->relative_offset));
+        break;
+    case AVR_OPERATION_AND:
+        written = snprintf(buffer, buffer_size,
+                           "Keep only the bits set in both R%u and R%u; store the result in R%u.",
+                           instruction->destination_register, instruction->source_register,
+                           instruction->destination_register);
+        break;
+    case AVR_OPERATION_OR:
+        written = snprintf(buffer, buffer_size,
+                           "Set every bit that is set in R%u or R%u; store the result in R%u.",
+                           instruction->destination_register, instruction->source_register,
+                           instruction->destination_register);
+        break;
+    case AVR_OPERATION_EOR:
+        written = snprintf(buffer, buffer_size,
+                           "Flip the bits in R%u that are set in R%u (bitwise XOR); "
+                           "store the result in R%u.",
+                           instruction->destination_register, instruction->source_register,
+                           instruction->destination_register);
+        break;
+    case AVR_OPERATION_CP:
+        written = snprintf(buffer, buffer_size,
+                           "Compare R%u and R%u; only updates flags, used by the next branch.",
+                           instruction->destination_register, instruction->source_register);
+        break;
+    case AVR_OPERATION_CPI:
+        written = snprintf(buffer, buffer_size,
+                           "Compare R%u with the number %u; only updates flags, "
+                           "used by the next branch.",
+                           instruction->destination_register, instruction->immediate);
+        break;
+    case AVR_OPERATION_SBI:
+        written = snprintf(buffer, buffer_size,
+                           "Turn on bit %u of io-register %s (e.g. drive a GPIO pin high "
+                           "or mark it an output).",
+                           instruction->bit_index,
+                           io_name(instruction->immediate, io_buffer, sizeof(io_buffer)));
+        break;
+    case AVR_OPERATION_CBI:
+        written = snprintf(buffer, buffer_size,
+                           "Turn off bit %u of io-register %s (e.g. drive a GPIO pin low "
+                           "or mark it an input).",
+                           instruction->bit_index,
+                           io_name(instruction->immediate, io_buffer, sizeof(io_buffer)));
+        break;
+    case AVR_OPERATION_PUSH:
+        written = snprintf(buffer, buffer_size, "Save R%u onto the stack.",
+                           instruction->source_register);
+        break;
+    case AVR_OPERATION_POP:
+        written = snprintf(buffer, buffer_size,
+                           "Remove the top value from the stack and load it into R%u.",
+                           instruction->destination_register);
+        break;
+    case AVR_OPERATION_CALL:
+        written = snprintf(buffer, buffer_size,
+                           "Jump to line %u and remember where to come back to.",
+                           instruction->target_address);
+        break;
+    case AVR_OPERATION_RET:
+        written = snprintf(buffer, buffer_size, "Return to the line right after the last CALL.");
+        break;
+    default:
+        return false;
+    }
+
+    return written > 0 && (size_t)written < buffer_size;
+}
+
+const char *avr_debug_flag_name(uint8_t sreg_mask)
+{
+    switch (sreg_mask)
+    {
+    case AVR_SREG_I:
+        return "Interrupt Enable";
+    case AVR_SREG_T:
+        return "T-bit";
+    case AVR_SREG_H:
+        return "Half-Carry";
+    case AVR_SREG_S:
+        return "Sign";
+    case AVR_SREG_V:
+        return "Overflow";
+    case AVR_SREG_N:
+        return "Negative";
+    case AVR_SREG_Z:
+        return "Zero";
+    case AVR_SREG_C:
+        return "Carry";
+    default:
+        return "Unknown";
+    }
+}
+
 bool avr_debug_step_with_events(AvrMCU *mcu, AvrEventLog *events)
 {
     AvrSnapshot before;
