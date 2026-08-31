@@ -1,0 +1,213 @@
+## Plan: Human-Friendly TUI Redesign
+
+The TUI currently renders CPU state as a dense, abbreviation- and hex-heavy dump
+(`PC 0005 WORD F011 BREQ +2 (0x0008)` / `SP 0100 CYCLES 5 SREG 02 [I T H S V N Z C]
+00000010`, four redundant `DDRB`/`PORTB`/`PINB`/`INPUT` binary-string rows, plus a
+fifth `^`/`v` pin-symbol row). This is unreadable for non-specialists. This plan
+fully replaces that view with plain-language output: decimal-primary numbers (hex
+in parentheses), full SREG flag names with explicit ON/OFF, a one-sentence
+plain-English explanation of the current instruction, and a single consolidated
+GPIO table. There is no raw/expert toggle; this is a full replacement of the
+current rendering. The underlying emulator, debug/event API, and TUI input
+handling (`step`, `run`, `reset`, breakpoints, external-input toggles) are
+unchanged — this is a rendering-only pass.
+
+**Steps**
+
+### Phase 1: Debug layer additions (`include/avr_debug.h`, `src/debug/avr_debug.c`)
+
+1. Add `bool avr_debug_explain_instruction(const AvrInstruction *instruction, uint16_t pc, char *buffer, size_t buffer_size)`,
+   mirroring the existing `switch` structure and false-on-unknown-op /
+   false-on-too-small-buffer contract of `avr_debug_format_instruction` (line
+   ~76 of `avr_debug.c`). Reuse the same `pc + 1 + relative_offset` target
+   resolution already used there for `RJMP`/`BRNE`/`BREQ`. Use a buffer size of
+   at least 96 chars at call sites (sentences are longer than mnemonics).
+   One sentence per `AvrOperation` (final wording may be trimmed for length,
+   but content must match):
+   - `LDI Rd, K` -> "Load the number K into register Rd."
+   - `MOV Rd, Rr` -> "Copy the value of Rr into Rd."
+   - `ADD Rd, Rr` -> "Add Rr to Rd and store the result in Rd."
+   - `SUB Rd, Rr` -> "Subtract Rr from Rd and store the result in Rd."
+   - `INC Rd` -> "Add 1 to Rd."
+   - `LD Rd, X` -> "Load the byte at memory address X (R27:R26) into Rd."
+   - `ST X, Rr` -> "Store Rr into memory at address X (R27:R26)."
+   - `IN Rd, A` -> "Copy the value of io-register A into Rd."
+   - `OUT A, Rr` -> "Copy Rr into io-register A."
+   - `RJMP k` -> "Jump to line N." (N = resolved target)
+   - `BRNE k` -> "If the last result was not zero, jump to line N; otherwise continue to the next line."
+   - `BREQ k` -> "If the last result was zero, jump to line N; otherwise continue to the next line."
+   - `DEC Rd` -> "Subtract 1 from Rd."
+   - `AND Rd, Rr` -> "Keep only the bits set in both Rd and Rr; store the result in Rd."
+   - `OR Rd, Rr` -> "Set every bit that is set in Rd or Rr; store the result in Rd."
+   - `EOR Rd, Rr` -> "Flip the bits in Rd that are set in Rr (bitwise XOR); store the result in Rd."
+   - `CP Rd, Rr` -> "Compare Rd and Rr; only updates flags, used by the next branch."
+   - `CPI Rd, K` -> "Compare Rd with the number K; only updates flags, used by the next branch."
+   - `SBI A, b` -> "Turn on bit b of io-register A (e.g. drive a GPIO pin high or mark it an output)."
+   - `CBI A, b` -> "Turn off bit b of io-register A (e.g. drive a GPIO pin low or mark it an input)."
+   - `PUSH Rr` -> "Save Rr onto the stack."
+   - `POP Rd` -> "Remove the top value from the stack and load it into Rd."
+   - `CALL k` -> "Jump to line N and remember where to come back to."
+   - `RET` -> "Return to the line right after the last CALL."
+2. Add `const char *avr_debug_flag_name(uint8_t sreg_mask)` mapping the existing
+   `AVR_SREG_C/Z/N/V/S/H/T/I` masks (`include/avr_mcu.h` lines 16-23) to full
+   names, keeping AVR's conventional `I T H S V N Z C` display order:
+   - `AVR_SREG_I` -> "Interrupt Enable"
+   - `AVR_SREG_T` -> "T-bit"
+   - `AVR_SREG_H` -> "Half-Carry"
+   - `AVR_SREG_S` -> "Sign"
+   - `AVR_SREG_V` -> "Overflow"
+   - `AVR_SREG_N` -> "Negative"
+   - `AVR_SREG_Z` -> "Zero"
+   - `AVR_SREG_C` -> "Carry"
+   - Return `"Unknown"` for any other/multi-bit input (defensive; callers only
+     pass single-bit masks).
+3. Extend `tests/test_phase10.c` with:
+   - `avr_debug_explain_instruction` cases for at least one representative
+     instruction per operand shape already covered by the existing
+     `avr_debug_format_instruction` tests (register-register, register-immediate,
+     I/O, branch/jump-with-resolved-target, bit-index, stack/subroutine, `RET`),
+     plus a short-buffer-rejection case.
+   - `avr_debug_flag_name` cases for all 8 masks plus one non-matching value.
+   These are pure-function tests, so they run under the existing headless
+   `make test` even though the TUI itself is not exercised by the test suite.
+
+### Phase 2: TUI screen redesign (`src/ui/avr_tui.c`) — depends on Phase 1
+
+1. **Fix the existing overflow bug and make layout responsive.** The current
+   fixed layout already writes to row 24 (needs 25 rows), which overflows a
+   standard 24-row terminal even today. Replace literal row/column constants
+   with a layout computed once per frame from `getmaxyx(stdscr, term_rows,
+   term_cols)`. Adopt a single-column, full-width panel layout (top to bottom,
+   in this order) rather than trying to squeeze everything into the old
+   ~72x25 footprint, since the new content (full flag names, plain-English
+   sentences, a wider GPIO table) needs more room than the old abbreviated
+   view:
+   - Header: title, `RUN`/`PAUSED`, status message (1 row, same as today).
+   - Current Instruction panel (Step 2 below).
+   - Processor State panel (Step 3 below).
+   - Registers panel (Step 4 below).
+   - Memory (SRAM) panel (Step 5 below).
+   - GPIO panel (Step 6 below).
+   - Footer / key reference (Step 7 below).
+   Set a concrete minimum size of **100 columns x 40 rows**. If
+   `term_cols < 100 || term_rows < 40`, skip drawing panels and instead
+   `erase()` + print a single centered message: `"Terminal too small: resize to
+   at least 100x40 (currently WxH)."`, refreshed every frame so it updates live
+   as the user resizes. This is a deliberate size increase over the old
+   (already-broken) implicit ~72x25 assumption, trading a larger minimum
+   terminal for a readable, non-cramped layout.
+2. **Current Instruction panel** (replaces `PC 0005 WORD F011 BREQ +2 (0x0008)`):
+   - Line 1 (reverse-highlighted, as today): `Line 5 (0x0005): BREQ +2, jump to line 8`
+     — i.e. keep the existing disassembly from `avr_debug_format_instruction`
+     but lead with decimal line number and hex in parens instead of `PC 0005`.
+   - Line 2: the plain-English sentence from `avr_debug_explain_instruction`.
+   - Line 3 (dim/de-emphasized): `Machine word: 0xF011` plus, if set,
+     `  Breakpoint is set on this line` (replacing the terse `BREAKPOINT` tag).
+   - If `instruction_valid` is false, keep an explicit fallback message (today:
+     `<invalid instruction>`) on line 1 and omit lines 2-3.
+3. **Processor State panel** (replaces `SP 0100 CYCLES 5 SREG 02 [...] 00000010`):
+   - Line 1: `Stack pointer: 256 (0x0100)      Cycles executed: 5`.
+   - Lines 2-3: all 8 flags by full name with explicit `ON`/`OFF`, laid out as
+     two rows of four in the fixed `I T H S / V N Z C` order, e.g.:
+     `Interrupt Enable: OFF   T-bit: OFF   Half-Carry: OFF   Sign: OFF`
+     `Overflow: OFF          Negative: OFF   Zero: ON    Carry: OFF`
+     `ON` flags are bolded and use the existing green `COLOR_PAIR(1)` convention
+     already used for "high" signals elsewhere in the UI, so "on" has one
+     consistent visual meaning across the whole screen.
+4. **Registers panel**: keep the `R0`-`R31` hex grid and the existing
+   change-highlight mechanism (`value_changed` + reverse video) — per the
+   decision below, register contents stay hex-only. Only change: clearer
+   section header and consistent column spacing now that layout is
+   `getmaxyx`-driven instead of hardcoded.
+5. **Memory (SRAM) panel**: keep the hex byte grid (bytes `0x00`-`0x3F`) and
+   existing change-highlighting, per the decision below. Add a clearer header
+   that states the range in both forms, e.g. `Memory (SRAM), bytes 0-63
+   (0x00-0x3F)`. Dim (`A_DIM`) any byte whose value is `0x00` so nonzero,
+   "interesting" bytes visually stand out against a mostly-empty memory dump.
+6. **GPIO panel — consolidate 5 redundant rows into 1 table.** Today's
+   `draw_bits`-based `DDRB`/`PORTB`/`PINB`/`INPUT` rows and the separate
+   `^`/`v` pin-symbol row all encode the same 8 bits five different ways.
+   Replace `draw_bits` with a new table-drawing function, one row per pin from
+   `PB7` down to `PB0` (matching the existing pin-row order), two columns:
+   - **Direction**: `"Output"` if the matching `ddrb` bit is set, else `"Input"`.
+   - **Level**: `"High"` if the computed `pinb` bit is set, else `"Low"`
+     (color the value green via `COLOR_PAIR(1)` when high, matching existing
+     convention; bold when the pin is an output, matching existing convention).
+   Below the table, keep one de-emphasized (`A_DIM`) line with the raw register
+   values for continuity/debugging: `Raw: DDRB=0x20 PORTB=0x00 PINB=0x01
+   INPUT=0x01`. Add one persistent legend line beneath that:
+   `Legend: green/bold = pin is HIGH and configured as an output`.
+7. **Footer**: reword ambiguous single-letter hints into short phrases, e.g.
+   `s = Step   r = Run/Pause   x = Reset & reload demo   b = Toggle breakpoint
+   0-7 = Toggle input pin   q = Quit`.
+8. Reuse `TuiState`, `refresh_snapshot`, `value_changed`, `step_once`,
+   `run_batch`, and `reset_demo` unchanged — none of the input handling or
+   event-log plumbing changes in this pass.
+
+### Phase 3: Documentation (`TUI-README.md`) — depends on Phase 2's final text
+
+1. Update the "screen contains these areas" section and every literal quoted
+   example of on-screen text in the tutorial (the `SP 0100 CYCLES 5 SREG 02
+   [...] 00000010` example, the `DDRB` binary-string examples, the `^`/`v`
+   pin-symbol description, and the `BREAKPOINT` tag) to match the new panel
+   text and the consolidated GPIO table.
+2. Add a line noting the new minimum terminal size (100x40) and the
+   resize-guard message, since the previous README made no size claims at all.
+
+**Resolved decisions (no open questions remain)**
+
+- Full replacement of the current view; no raw/expert toggle mode.
+- Decimal-primary, hex-in-parentheses applies to *addresses*: the current
+  line/PC, jump/call targets, and the stack pointer.
+- All 8 SREG flags are always shown by full name with explicit ON/OFF (never
+  a bare bit dump), in fixed `I T H S V N Z C` order.
+- Register and SRAM raw byte **contents** stay hex-only (not decimal-primary).
+  Rationale: register/memory dumps are conventionally read in hex by anyone
+  inspecting raw bytes, and showing decimal-with-hex-in-parens for 32 registers
+  and 64 SRAM bytes would roughly double the space each panel needs for
+  little readability benefit to a non-specialist, who is more likely to look
+  at the Current Instruction / Processor State / GPIO panels than raw memory.
+  Only panel headers/ranges gain clearer decimal labeling (e.g. "bytes 0-63").
+- The GPIO panel's 5 redundant binary rows collapse into 1 table (Direction +
+  Level per pin), with raw hex values demoted to a single dim reference line.
+- Minimum terminal size is fixed at 100 columns x 40 rows with a live
+  resize-guard message below that size. This is a deliberate increase over the
+  old implicit (and already-broken, since it silently overflowed 24-row
+  terminals) ~72x25 assumption, chosen because the added plain-language content
+  needs more room than the old abbreviated view; a single-column full-width
+  layout was chosen over a cramped two-column layout to keep every panel
+  easy to scan.
+
+**Relevant files**
+
+- `include/avr_debug.h` — declare `avr_debug_explain_instruction`, `avr_debug_flag_name`.
+- `src/debug/avr_debug.c` — implement both, alongside existing `avr_debug_format_instruction`/`io_name`.
+- `tests/test_phase10.c` — add coverage for both new pure functions.
+- `src/ui/avr_tui.c` — rewrite `draw_ui`, `draw_registers`, `draw_sram`; replace
+  `draw_bits` with a GPIO-table function; add a `getmaxyx`-based layout/size-guard
+  helper. `TuiState`, snapshot diffing, and all key handling in `main` are unchanged.
+- `TUI-README.md` — update screen/tutorial documentation and note the new minimum size.
+
+**Verification**
+
+1. `make test` — confirms the new `avr_debug_explain_instruction`/`avr_debug_flag_name`
+   unit tests pass alongside all existing Phase 1-10 tests (no CPU/debug-layer
+   behavior changes otherwise).
+2. `make tui` — manually re-walk the existing TUI-README tutorial steps (setup,
+   low/high input through the loop, breakpoint, reset) and confirm: decimal-primary
+   line numbers with hex in parens, full flag names with ON/OFF, a readable
+   one-sentence explanation per instruction, and the single consolidated GPIO
+   table (no more redundant binary rows).
+3. Manually resize the terminal below 100x40 to confirm the resize-guard message
+   appears (and updates live as the terminal is resized), then resize back up to
+   confirm normal rendering resumes without corruption.
+4. Confirm `make build` and the `main.c` CLI demo are unaffected — this pass is
+   TUI-rendering-only and touches no emulator/debug execution semantics.
+
+**Scope boundaries**
+
+- No new emulator or debug *behavior* changes (no new instructions, no timing
+  changes) — purely presentation, built on the existing `AvrSnapshot`/event-log
+  observation boundary plus two new pure-formatting functions.
+- No raw/expert toggle mode is added back in.
+- The SDL frontend (master-plan Phase 12) is out of scope for this pass.
