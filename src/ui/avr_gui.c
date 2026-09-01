@@ -111,6 +111,7 @@ static const char *find_font_path(void)
         "/System/Library/Fonts/Supplemental/Andale Mono.ttf",
         "/System/Library/Fonts/Monaco.ttf",
         "/Library/Fonts/Arial.ttf",
+        "/usr/share/fonts/google-noto/NotoSans-Regular.ttf",
     };
     size_t index;
 
